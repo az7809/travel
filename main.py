@@ -340,7 +340,9 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
                 len(itinerary),
                 data.get("summary", {}).get("cities", []))
 
-    share_url = f"{request.base_url}share/{itinerary_id}".replace("http://", "https://", 1)
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "127.0.0.1:8000")
+    proto = request.headers.get("x-forwarded-proto", "https")
+    share_url = f"{proto}://{host}/share/{itinerary_id}"
     logger.info("Generate complete: id=%s share_url=%s", itinerary_id, share_url)
 
     return GenerateResponse(status="success", share_url=share_url)
