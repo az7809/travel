@@ -458,15 +458,134 @@ async def share_itinerary(request: Request, itinerary_id: str):
 # ===========================================================================
 # Root / Health
 # ===========================================================================
-@app.get("/")
-async def root():
-    return {
-        "status": "online",
-        "service": "EuroTour Hub API Gateway",
-        "version": "3.1-production",
-        "commit": "f3e5b1c",
-        "documentation": "/docs",
-    }
+@app.get("/", response_class=HTMLResponse)
+async def guide_entrance_page(request: Request):
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>欧洲全景司导云端开单工作台</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .glow-btn:hover { box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+    </style>
+</head>
+<body class="bg-neutral-950 text-neutral-100 min-h-screen flex flex-col justify-between pb-8">
+
+    <header class="max-w-xl w-full mx-auto px-6 pt-12 text-center space-y-2">
+        <div class="inline-flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">B2B2C Cloud Workbench v3.5</span>
+        </div>
+        <h1 class="text-xl font-black tracking-tight text-neutral-50">欧洲向导极速开单系统</h1>
+        <p class="text-xs text-neutral-400">粘贴散客原始意向大白话，AI 自动清洗并注入高分 Google Map 餐饮底座</p>
+    </header>
+
+    <main class="max-w-xl w-full mx-auto px-6 my-auto pt-6">
+        <form id="orderForm" class="bg-neutral-900 border border-neutral-800/80 rounded-2xl p-6 space-y-5 shadow-2xl">
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">向导工号 (User ID)</label>
+                    <input type="text" id="userId" required placeholder="如: Paris_Alex_666"
+                           class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">分销追踪码 (Booking AID)</label>
+                    <input type="text" id="bookingAid" required placeholder="如: alex_vip_partner"
+                           class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors">
+                </div>
+            </div>
+
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">客户托管安保级别</label>
+                <select id="securityMode" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors">
+                    <option value="standard">STANDARD (标准白标分流模式)</option>
+                    <option value="concierge">CONCIERGE (高净值黑金隐私拦截模式)</option>
+                </select>
+            </div>
+
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">散客原始行程意向 (微信记录/草稿)</label>
+                <textarea id="rawText" required rows="5" placeholder="例如: 5月24号去巴黎，想看巴黎圣母院内部入内讲解，下午去看埃菲尔铁塔。顺便推荐附近Google Map好评最高的餐厅..."
+                          class="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors leading-relaxed resize-none"></textarea>
+            </div>
+
+            <button type="submit" class="w-full glow-btn bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs tracking-widest py-3 rounded-xl transition-all duration-300 transform active:scale-[0.98] cursor-pointer">
+                ⚡ 自动化编译并落盘生成专属行程
+            </button>
+        </form>
+
+        <div id="resultBoard" class="mt-6 bg-neutral-900 border border-emerald-500/30 rounded-2xl p-5 space-y-4 hidden">
+            <div class="flex items-center space-x-2 text-emerald-400">
+                <span class="text-xs font-bold">🎉 行程编译成功！数据已永固落盘</span>
+            </div>
+            <div class="p-3 bg-neutral-950 rounded-xl border border-neutral-800 relative group">
+                <p class="text-[9px] text-neutral-500 uppercase tracking-wider">散客专属动态渲染分销链接</p>
+                <p id="shareUrl" class="text-xs font-mono text-emerald-400 break-all font-bold mt-1 pr-12 select-all"></p>
+                <button onclick="copyUrl()" class="absolute right-3 top-4 text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded cursor-pointer">复制</button>
+            </div>
+            <div class="flex gap-3">
+                <a id="previewBtn" target="_blank" class="flex-1 text-center py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-xl transition-colors">
+                    👀 司导真机预览
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer class="text-center text-[10px] text-neutral-600 tracking-wider">
+        Powered by DeepSeek Engine & Supabase Storage Pooler. All rights reserved.
+    </footer>
+
+    <script>
+        document.getElementById('orderForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.innerText = "⏳ 正在调集 DEEPSEEK 编译并铺设 GOOGLE MAP 高分餐厅...";
+
+            const payload = {
+                user_id: document.getElementById('userId').value.trim(),
+                raw_text: document.getElementById('rawText').value.trim(),
+                security_mode: document.getElementById('securityMode').value,
+                booking_aid: document.getElementById('bookingAid').value.trim()
+            };
+
+            try {
+                const response = await fetch('/api/v1/itinerary/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error('网关响应异常');
+                const data = await response.json();
+
+                if (data.share_url) {
+                    document.getElementById('shareUrl').innerText = data.share_url;
+                    document.getElementById('previewBtn').href = data.share_url;
+                    document.getElementById('resultBoard').classList.remove('hidden');
+                    document.getElementById('resultBoard').scrollIntoView({ behavior: 'smooth' });
+                }
+            } catch (err) {
+                alert('开单失败，请检查网络或后端环境: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "⚡ 自动化编译并落盘生成专属行程";
+            }
+        });
+
+        function copyUrl() {
+            const url = document.getElementById('shareUrl').innerText;
+            navigator.clipboard.writeText(url);
+            alert('链接已成功复制到剪贴板，可直接发给散客！');
+        }
+    </script>
+</body>
+</html>""")
 
 
 @app.get("/health")
