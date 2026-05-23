@@ -240,54 +240,35 @@
     </div>
 
     <!-- ====== Restaurant Recommendations ====== -->
-    {% if day.recommended_restaurants and day.recommended_restaurants|length > 0 %}
-    <div class="px-5 py-4 border-t border-blush/20">
-      <div class="flex items-center gap-2 mb-3">
-        <span class="text-lg">🍽️</span>
-        <h3 class="font-serif text-sm font-semibold text-ink">司导私藏高分餐厅 · Google Map 4.5★+</h3>
-        <span class="text-[10px] text-warm/40 ml-auto">{{ day.recommended_restaurants|length }} 家精选</span>
+    {% if day.recommended_restaurants %}
+    <div class="mt-6 pt-4 border-t border-dashed {{ 'border-neutral-800' if security_mode == 'concierge' else 'border-neutral-200' }}">
+      <div class="flex items-center space-x-2 mb-3">
+        <span class="text-xs font-bold tracking-wide px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          📊 GOOGLE MAP TOP推荐
+        </span>
+        <h4 class="text-xs font-bold {{ 'text-neutral-300' if security_mode == 'concierge' else 'text-neutral-700' }}">
+          司导精选 · 景点周边高分美食（{{ day.recommended_restaurants|length }}家）
+        </h4>
       </div>
-      <div class="space-y-2.5">
-        {% for r in day.recommended_restaurants[:6] %}
-        <div class="flex items-start gap-2.5 bg-cream/60 rounded-xl px-3.5 py-3 border border-blush/10">
-          <!-- Rating badge -->
-          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gold/15 flex flex-col items-center justify-center">
-            <span class="text-xs font-bold text-gold leading-none">{{ r.google_rating or "4.5★" }}</span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center justify-between gap-2">
-              <h5 class="text-sm font-medium text-ink truncate">{{ r.name }}</h5>
-              <span class="text-xs text-warm/50 flex-shrink-0">{{ r.price_level or "€€" }}</span>
+      <div class="space-y-3">
+        {% for rest in day.recommended_restaurants %}
+        <div class="p-3 rounded-xl border transition-all {{ 'bg-neutral-950/40 border-neutral-800/60' if security_mode == 'concierge' else 'bg-neutral-50/60 border-neutral-100 hover:bg-neutral-50' }}">
+          <div class="flex items-start justify-between space-x-2">
+            <div>
+              <h5 class="text-xs font-bold {{ 'text-neutral-200' if security_mode == 'concierge' else 'text-neutral-800' }}">
+                {{ rest.name }}
+              </h5>
+              <p class="text-[11px] {{ 'text-neutral-400' if security_mode == 'concierge' else 'text-neutral-500' }} mt-1 leading-relaxed">
+                {{ rest.highlight }}
+              </p>
             </div>
-            <p class="text-[11px] text-warm/50 mt-0.5">{{ r.distance }}</p>
-            <p class="text-xs text-warm mt-1.5 leading-relaxed">{{ r.highlight }}</p>
+            <div class="text-right shrink-0">
+              <span class="text-xs font-black text-amber-500 font-mono">{{ rest.google_rating }}</span>
+              <p class="text-[10px] text-neutral-500 font-mono mt-0.5">{{ rest.price_level }} · {{ rest.distance }}</p>
+            </div>
           </div>
         </div>
         {% endfor %}
-        {% if day.recommended_restaurants|length > 6 %}
-        <details class="group mt-1">
-          <summary class="text-xs text-gold cursor-pointer hover:text-gold/80 transition-colors text-center py-1">
-            展开全部 {{ day.recommended_restaurants|length }} 家餐厅 ▼
-          </summary>
-          <div class="space-y-2.5 mt-2.5">
-            {% for r in day.recommended_restaurants[6:] %}
-            <div class="flex items-start gap-2.5 bg-cream/60 rounded-xl px-3.5 py-3 border border-blush/10">
-              <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gold/15 flex flex-col items-center justify-center">
-                <span class="text-xs font-bold text-gold leading-none">{{ r.google_rating or "4.5★" }}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center justify-between gap-2">
-                  <h5 class="text-sm font-medium text-ink truncate">{{ r.name }}</h5>
-                  <span class="text-xs text-warm/50 flex-shrink-0">{{ r.price_level or "€€" }}</span>
-                </div>
-                <p class="text-[11px] text-warm/50 mt-0.5">{{ r.distance }}</p>
-                <p class="text-xs text-warm mt-1.5 leading-relaxed">{{ r.highlight }}</p>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        </details>
-        {% endif %}
       </div>
     </div>
     {% endif %}
