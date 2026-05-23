@@ -201,12 +201,12 @@
         <span class="font-serif text-2xl font-bold text-gold">{{ day.day }}</span>
         <div>
           <p class="text-xs text-warm/60">{{ day.date }}</p>
-          <p class="font-serif text-lg font-semibold text-ink">{{ day.city }}</p>
+          <p class="font-serif text-lg font-semibold text-ink">{{ day.headline or day.city }}</p>
         </div>
       </div>
       <div class="text-right text-xs text-warm/50">
         <p>驾驶 {{ day.driving_hours }}h</p>
-        <p>工时 {{ day.work_hours }}h</p>
+        <p>工时 {{ day.total_work_hours }}h</p>
       </div>
     </div>
 
@@ -238,6 +238,59 @@
       </div>
       {% endfor %}
     </div>
+
+    <!-- ====== Restaurant Recommendations ====== -->
+    {% if day.recommended_restaurants and day.recommended_restaurants|length > 0 %}
+    <div class="px-5 py-4 border-t border-blush/20">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-lg">🍽️</span>
+        <h3 class="font-serif text-sm font-semibold text-ink">司导私藏高分餐厅 · Google Map 4.5★+</h3>
+        <span class="text-[10px] text-warm/40 ml-auto">{{ day.recommended_restaurants|length }} 家精选</span>
+      </div>
+      <div class="space-y-2.5">
+        {% for r in day.recommended_restaurants[:6] %}
+        <div class="flex items-start gap-2.5 bg-cream/60 rounded-xl px-3.5 py-3 border border-blush/10">
+          <!-- Rating badge -->
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gold/15 flex flex-col items-center justify-center">
+            <span class="text-xs font-bold text-gold leading-none">{{ r.google_rating or "4.5★" }}</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-2">
+              <h5 class="text-sm font-medium text-ink truncate">{{ r.name }}</h5>
+              <span class="text-xs text-warm/50 flex-shrink-0">{{ r.price_level or "€€" }}</span>
+            </div>
+            <p class="text-[11px] text-warm/50 mt-0.5">{{ r.distance }}</p>
+            <p class="text-xs text-warm mt-1.5 leading-relaxed">{{ r.highlight }}</p>
+          </div>
+        </div>
+        {% endfor %}
+        {% if day.recommended_restaurants|length > 6 %}
+        <details class="group mt-1">
+          <summary class="text-xs text-gold cursor-pointer hover:text-gold/80 transition-colors text-center py-1">
+            展开全部 {{ day.recommended_restaurants|length }} 家餐厅 ▼
+          </summary>
+          <div class="space-y-2.5 mt-2.5">
+            {% for r in day.recommended_restaurants[6:] %}
+            <div class="flex items-start gap-2.5 bg-cream/60 rounded-xl px-3.5 py-3 border border-blush/10">
+              <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gold/15 flex flex-col items-center justify-center">
+                <span class="text-xs font-bold text-gold leading-none">{{ r.google_rating or "4.5★" }}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <h5 class="text-sm font-medium text-ink truncate">{{ r.name }}</h5>
+                  <span class="text-xs text-warm/50 flex-shrink-0">{{ r.price_level or "€€" }}</span>
+                </div>
+                <p class="text-[11px] text-warm/50 mt-0.5">{{ r.distance }}</p>
+                <p class="text-xs text-warm mt-1.5 leading-relaxed">{{ r.highlight }}</p>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Locked: Driving routes & insider tips -->
     <div class="relative mx-4 my-4 rounded-xl overflow-hidden border border-blush/20
