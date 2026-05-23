@@ -1,0 +1,407 @@
+"""
+main.py — 欧洲司导行程 FastAPI 后端服务（Production-grade）
+POST /api/v1/itinerary/generate — 异步 DeepSeek → 内存存储 → 分享链接
+GET  /share/{id}            — Jinja2 动态白标渲染 → 散客浏览器
+"""
+import json
+import logging
+import os
+import traceback
+import uuid
+from pathlib import Path
+from typing import Literal
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from jinja2 import Environment, FileSystemLoader, TemplateError, TemplateNotFound
+from openai import APIError, APIConnectionError, AsyncOpenAI, RateLimitError
+from pydantic import BaseModel, Field
+
+from system_prompt import get_system_prompt
+
+# ===========================================================================
+# Logging
+# ===========================================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("itinerary-engine")
+
+# ===========================================================================
+# Environment
+# ===========================================================================
+BASE_DIR = Path(__file__).resolve().parent
+
+# .env 仅用于本地开发；生产环境由平台注入环境变量
+_env_path = BASE_DIR / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path, override=True)
+
+DEEPSEEK_BASE = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
+if not DEEPSEEK_API_KEY:
+    raise RuntimeError("DEEPSEEK_API_KEY or ANTHROPIC_API_KEY is required — check environment variables")
+
+DEFAULT_BOOKING_AID = "QF_MAIN_DEFAULT_AID"
+
+# ===========================================================================
+# Async OpenAI client（全请求复用连接池）
+# ===========================================================================
+client = AsyncOpenAI(
+    api_key=DEEPSEEK_API_KEY,
+    base_url=DEEPSEEK_BASE,
+    timeout=60.0,
+    max_retries=2,
+)
+logger.info("AsyncOpenAI client initialized (base=%s, model=%s)", DEEPSEEK_BASE, DEEPSEEK_MODEL)
+
+# ===========================================================================
+# Jinja2 template engine
+# ===========================================================================
+TEMPLATES_DIR = BASE_DIR / "templates"
+if not TEMPLATES_DIR.is_dir():
+    raise RuntimeError(f"Templates directory not found: {TEMPLATES_DIR}")
+
+_jinja_env = Environment(
+    loader=FileSystemLoader(str(TEMPLATES_DIR)),
+    autoescape=False,
+    enable_async=False,
+)
+logger.info("Jinja2 environment loaded (%d template(s) in %s)",
+            len(_jinja_env.list_templates()), TEMPLATES_DIR)
+
+# ===========================================================================
+# In-memory data store（重启清空，后续对接 Redis / PostgreSQL）
+# ===========================================================================
+DB_ITINERARIES: dict[str, dict] = {}
+
+
+# ===========================================================================
+# 上下文构建
+# ===========================================================================
+def _dot_color(stop_type: str) -> str:
+    colors = {
+        "attraction": "bg-gold",
+        "restaurant": "bg-red-400",
+        "shopping": "bg-purple-400",
+        "other": "bg-gray-400",
+    }
+    return colors.get(stop_type, "bg-gold")
+
+
+def _prepare_context(
+    data: dict,
+    *,
+    user_id: str,
+    guide_name: str | None,
+    guide_wechat: str | None,
+    booking_aid: str | None,
+    security_mode: str,
+) -> dict:
+    """将 DeepSeek JSON + 请求参数组装为 Jinja2 模板上下文。"""
+    itinerary = data.get("itinerary", [])
+    summary = data.get("summary", {})
+
+    days = []
+    for d in itinerary:
+        stops = [
+            {**s, "dot_color": _dot_color(s.get("type", "attraction"))}
+            for s in d.get("stops", [])
+        ]
+        days.append({**d, "stops": stops})
+
+    cities = summary.get("cities", [])
+    title = " → ".join(cities) if cities else "欧洲定制行程"
+
+    return {
+        "guide_name": guide_name or "",
+        "guide_wechat": guide_wechat or "",
+        "guide_verified": bool(guide_name),
+        "user_id": user_id,
+        "title": title,
+        "cities": cities,
+        "total_days": summary.get("total_days", len(itinerary)),
+        "budget": summary.get("budget_range", "详询司导"),
+        "security_mode": security_mode,
+        "security_risk": data.get("security_risk") or "",
+        "warning": data.get("warning") or "",
+        "hotel_disclaimer": data.get("hotel_disclaimer", ""),
+        "booking_aid": booking_aid or DEFAULT_BOOKING_AID,
+        "days": days,
+    }
+
+
+# ===========================================================================
+# FastAPI application
+# ===========================================================================
+app = FastAPI(
+    title="欧洲司导行程引擎",
+    description="WeChat → DeepSeek → 分享链接 · 全自动异步流水线",
+    version="2.1.0",
+)
+
+
+# ===========================================================================
+# Data models
+# ===========================================================================
+class ItineraryRequest(BaseModel):
+    user_id: str = Field(
+        ..., min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$",
+        description="导游唯一标识，如 guide_01",
+    )
+    raw_text: str = Field(
+        ..., min_length=1, max_length=10000,
+        description="微信聊天混乱文本",
+    )
+    security_mode: Literal["standard", "concierge"] = Field(
+        default="standard",
+        description="standard: 不提安保; concierge: 时装周特护影子安保协议",
+    )
+    booking_aid: str | None = Field(
+        default=None, min_length=1, max_length=32,
+        description="导游个人 Booking 联盟 ID，为空则降级为平台默认 ID",
+    )
+    guide_name: str | None = Field(
+        default=None, max_length=32,
+        description="司导姓名，用于白标页面顶部和尾部渲染",
+    )
+    guide_wechat: str | None = Field(
+        default=None, max_length=64,
+        description="司导微信号，用于白标页面联系方式展示",
+    )
+
+
+class GenerateResponse(BaseModel):
+    status: str
+    share_url: str
+
+
+class ErrorResponse(BaseModel):
+    status: str = "error"
+    detail: str
+
+
+# ===========================================================================
+# POST /api/v1/itinerary/generate
+# ===========================================================================
+@app.post(
+    "/api/v1/itinerary/generate",
+    response_model=GenerateResponse,
+    responses={500: {"model": ErrorResponse}},
+    summary="生成行程并返回分享链接",
+)
+async def generate_itinerary(req: ItineraryRequest):
+    logger.info("Generate request received: user_id=%s mode=%s text_len=%d",
+                req.user_id, req.security_mode, len(req.raw_text))
+
+    system_prompt = get_system_prompt(req.security_mode)
+
+    # --- DeepSeek API 调用 ---
+    try:
+        response = await client.chat.completions.create(
+            model=DEEPSEEK_MODEL,
+            temperature=0.3,
+            max_tokens=8192,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": req.raw_text},
+            ],
+        )
+        logger.info("DeepSeek response received: model=%s usage=%s",
+                    response.model, getattr(response, "usage", "N/A"))
+    except RateLimitError as exc:
+        logger.error("DeepSeek rate limit exceeded: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="DeepSeek API 频率限制，请稍后重试。",
+        )
+    except APIConnectionError as exc:
+        logger.error("DeepSeek connection error: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="无法连接 DeepSeek API，请检查网络或 API 端点配置。",
+        )
+    except APIError as exc:
+        logger.error("DeepSeek API error: status=%s message=%s",
+                    getattr(exc, "status_code", "?"), exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"DeepSeek API 返回错误 (status={getattr(exc, 'status_code', '?')})。",
+        )
+    except Exception as exc:
+        logger.error("Unexpected DeepSeek error: %s\n%s", exc, traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"DeepSeek API 调用失败: {exc}",
+        )
+
+    # --- JSON 解析 ---
+    content = response.choices[0].message.content
+    if not content:
+        logger.error("DeepSeek returned empty content (finish_reason=%s)",
+                     response.choices[0].finish_reason)
+        raise HTTPException(
+            status_code=500,
+            detail="DeepSeek 返回空内容，可能是输入过长或模型拒绝生成。请精简聊天记录后重试。",
+        )
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        logger.error(
+            "JSON parse failed at line %d col %d — raw preview (first 500 chars): %s",
+            exc.lineno, exc.colno, content[:500],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"DeepSeek 返回的内容不是合法 JSON：{exc.msg} "
+                f"(line {exc.lineno}, col {exc.colno})。"
+                f"原始返回前 500 字符: {content[:500]}"
+            ),
+        )
+
+    # --- 验证关键字段 ---
+    itinerary = data.get("itinerary")
+    if not itinerary or not isinstance(itinerary, list):
+        logger.error("JSON missing 'itinerary' array — keys: %s", list(data.keys())[:10])
+        raise HTTPException(
+            status_code=500,
+            detail="行程 JSON 缺少必需的 'itinerary' 字段，请检查 System Prompt 或聊天记录输入。",
+        )
+
+    # --- 存储 + 生成分享链接 ---
+    itinerary_id = uuid.uuid4().hex[:12]
+    record = {
+        "data": data,
+        "user_id": req.user_id,
+        "guide_name": req.guide_name,
+        "guide_wechat": req.guide_wechat,
+        "booking_aid": req.booking_aid,
+        "security_mode": req.security_mode,
+    }
+    DB_ITINERARIES[itinerary_id] = record
+    logger.info("Itinerary stored: id=%s user_id=%s days=%d cities=%s",
+                itinerary_id, req.user_id,
+                len(itinerary),
+                data.get("summary", {}).get("cities", []))
+
+    share_url = f"{BASE_URL}/share/{itinerary_id}"
+    logger.info("Generate complete: id=%s share_url=%s", itinerary_id, share_url)
+
+    return GenerateResponse(status="success", share_url=share_url)
+
+
+# ===========================================================================
+# GET /share/{itinerary_id} — 公开分享页面
+# ===========================================================================
+NOT_FOUND_HTML = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>404 · 行程未找到</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#FAF6F1] flex items-center justify-center min-h-screen">
+<div class="text-center px-4">
+  <p class="text-6xl mb-4">🧳</p>
+  <h1 class="font-serif text-2xl font-bold text-[#2C2416] mb-2">行程未找到</h1>
+  <p class="text-[#5C4B3A] text-sm">该分享链接已失效或不存在，请联系司导获取最新行程。</p>
+</div>
+</body>
+</html>"""
+
+ERROR_HTML = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>渲染错误</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#FAF6F1] flex items-center justify-center min-h-screen">
+<div class="text-center px-4">
+  <p class="text-6xl mb-4">🔧</p>
+  <h1 class="font-serif text-2xl font-bold text-[#2C2416] mb-2">页面渲染失败</h1>
+  <p class="text-[#5C4B3A] text-sm">服务暂时不可用，请稍后重试或联系司导。</p>
+</div>
+</body>
+</html>"""
+
+
+@app.get(
+    "/share/{itinerary_id}",
+    response_class=HTMLResponse,
+    summary="公开分享页面",
+)
+async def share_itinerary(request: Request, itinerary_id: str):
+    logger.info("Share request received: id=%s", itinerary_id)
+
+    record = DB_ITINERARIES.get(itinerary_id)
+    if not record:
+        logger.warning("Share 404: id=%s not found (total records=%d)",
+                       itinerary_id, len(DB_ITINERARIES))
+        return HTMLResponse(content=NOT_FOUND_HTML, status_code=404)
+
+    # 构建模板上下文
+    try:
+        context = _prepare_context(
+            record["data"],
+            user_id=record["user_id"],
+            guide_name=record["guide_name"],
+            guide_wechat=record["guide_wechat"],
+            booking_aid=record["booking_aid"],
+            security_mode=record["security_mode"],
+        )
+    except Exception as exc:
+        logger.error("Context preparation failed: id=%s error=%s\n%s",
+                     itinerary_id, exc, traceback.format_exc())
+        return HTMLResponse(content=ERROR_HTML, status_code=500)
+
+    # Jinja2 实时渲染
+    try:
+        template = _jinja_env.get_template("itinerary.html")
+        html = template.render(request=request, **context)
+        logger.info("Share rendered: id=%s html_size=%d", itinerary_id, len(html))
+        return HTMLResponse(content=html)
+    except TemplateNotFound:
+        logger.critical("Template 'itinerary.html' not found in %s", TEMPLATES_DIR)
+        return HTMLResponse(content=ERROR_HTML, status_code=500)
+    except TemplateError as exc:
+        logger.error("Template render error: id=%s error=%s\n%s",
+                     itinerary_id, exc, traceback.format_exc())
+        return HTMLResponse(content=ERROR_HTML, status_code=500)
+    except Exception as exc:
+        logger.error("Unexpected render error: id=%s error=%s\n%s",
+                     itinerary_id, exc, traceback.format_exc())
+        return HTMLResponse(content=ERROR_HTML, status_code=500)
+
+
+# ===========================================================================
+# Health check
+# ===========================================================================
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "service": "itinerary-engine",
+        "stored": len(DB_ITINERARIES),
+    }
+
+
+# ===========================================================================
+# Entrypoint
+# ===========================================================================
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

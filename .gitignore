@@ -1,0 +1,9 @@
+.vercel
+.env
+__pycache__/
+.venv/
+.streamlit/
+*.pyc
+index_*.html
+output_*.json
+.DS_Store
