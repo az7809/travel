@@ -3,6 +3,7 @@ main.py — 欧洲司导行程 FastAPI 后端服务（Production-grade）
 POST /api/v1/itinerary/generate — 异步 DeepSeek → PostgreSQL 持久化 → 分享链接
 GET  /share/{id}            — Jinja2 动态白标渲染 → 散客浏览器
 """
+import asyncio
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from databases import Database
 from dotenv import load_dotenv
@@ -57,6 +59,16 @@ if not DATABASE_URL:
 # 兼容 Render / Railway 的 postgres:// 协议头
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# URL 安全编码：对密码组件中的特殊字符（# @ : / ?）进行百分号转义，
+# 防止 asyncpg 底层 urlsplit 抛出 ValueError: Invalid IPv6 URL
+_parts = urlparse(DATABASE_URL)
+if _parts.password:
+    _safe_password = quote(unquote(_parts.password), safe="")
+    _safe_netloc = f"{_parts.username}:{_safe_password}@{_parts.hostname}"
+    if _parts.port:
+        _safe_netloc += f":{_parts.port}"
+    DATABASE_URL = urlunparse(_parts._replace(netloc=_safe_netloc))
 
 DEFAULT_BOOKING_AID = "QF_MAIN_DEFAULT_AID"
 
@@ -153,22 +165,39 @@ def _prepare_context(
 
 
 # ===========================================================================
-# Lifespan — PostgreSQL 异步连接池生命周期（优化版）
+# Lifespan — PostgreSQL 异步连接池生命周期（Render 冷启动容错）
 # ===========================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动阶段：建立连接池 + 健康验证
-    await database.connect()
+    # 非阻塞连接：Supavisor session pooler 冷启动可能 >15s，
+    # 若阻塞则触发 Render free-tier Startup Timeout → 应用被 SIGKILL
     try:
-        # 验证连接可用性（Supabase PgBouncer 可能返回就绪但实际未路由）
-        await database.fetch_val("SELECT 1")
-        logger.info("PostgreSQL pool ready — %s", DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "connected")
-    except Exception:
-        logger.warning("Initial health ping failed — pool may still be warming; retrying on first request")
+        await asyncio.wait_for(database.connect(), timeout=10.0)
+    except (asyncio.TimeoutError, Exception) as exc:
+        logger.warning(
+            "Database pool warmup deferred — %s. "
+            "First DB-bound request will trigger lazy connect.",
+            exc.__class__.__name__,
+        )
+    else:
+        try:
+            await database.fetch_val("SELECT 1")
+            logger.info(
+                "PostgreSQL pool ready — %s",
+                DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "connected",
+            )
+        except Exception:
+            logger.warning("Initial health ping failed — pool may still be warming; retrying on first request")
+
     yield
+
     # 关闭阶段：优雅释放连接池
-    await database.disconnect()
-    logger.info("PostgreSQL pool released")
+    try:
+        await asyncio.wait_for(database.disconnect(), timeout=5.0)
+    except Exception:
+        logger.warning("Database disconnect timed out — connections will be cleaned up by OS")
+    else:
+        logger.info("PostgreSQL pool released")
 
 
 # ===========================================================================
