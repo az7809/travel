@@ -1,6 +1,6 @@
 """
 main.py — 欧洲司导行程 FastAPI 后端服务（Production-grade）
-POST /api/v1/itinerary/generate — 异步 DeepSeek → 内存存储 → 分享链接
+POST /api/v1/itinerary/generate — 异步 DeepSeek → PostgreSQL / 内存存储 → 分享链接
 GET  /share/{id}            — Jinja2 动态白标渲染 → 散客浏览器
 """
 import json
@@ -8,9 +8,11 @@ import logging
 import os
 import traceback
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
+from databases import Database
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -48,7 +50,11 @@ BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 if not DEEPSEEK_API_KEY:
     raise RuntimeError("DEEPSEEK_API_KEY or ANTHROPIC_API_KEY is required — check environment variables")
 
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 DEFAULT_BOOKING_AID = "QF_MAIN_DEFAULT_AID"
+
+database = Database(DATABASE_URL) if DATABASE_URL else None
+DB_ITINERARIES: dict[str, dict] = {}  # 内存回退（DATABASE_URL 为空时启用）
 
 # ===========================================================================
 # Async OpenAI client（全请求复用连接池）
@@ -75,12 +81,6 @@ _jinja_env = Environment(
 )
 logger.info("Jinja2 environment loaded (%d template(s) in %s)",
             len(_jinja_env.list_templates()), TEMPLATES_DIR)
-
-# ===========================================================================
-# In-memory data store（重启清空，后续对接 Redis / PostgreSQL）
-# ===========================================================================
-DB_ITINERARIES: dict[str, dict] = {}
-
 
 # ===========================================================================
 # 上下文构建
@@ -138,12 +138,44 @@ def _prepare_context(
 
 
 # ===========================================================================
+# Lifespan — PostgreSQL 连接池管理
+# ===========================================================================
+DDL_ITINERARIES = """
+CREATE TABLE IF NOT EXISTS itineraries (
+    id VARCHAR(12) PRIMARY KEY,
+    user_id VARCHAR(100) NOT NULL,
+    security_mode VARCHAR(50) NOT NULL DEFAULT 'standard',
+    booking_aid VARCHAR(100),
+    guide_name VARCHAR(100),
+    guide_wechat VARCHAR(100),
+    structured_json JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if database is not None:
+        await database.connect()
+        await database.execute(DDL_ITINERARIES)
+        logger.info("PostgreSQL connected — DATABASE_URL=%s", DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else DATABASE_URL)
+    else:
+        logger.warning("DATABASE_URL not set — using in-memory store (data lost on restart)")
+    yield
+    if database is not None:
+        await database.disconnect()
+        logger.info("PostgreSQL disconnected")
+
+
+# ===========================================================================
 # FastAPI application
 # ===========================================================================
 app = FastAPI(
     title="欧洲司导行程引擎",
     description="WeChat → DeepSeek → 分享链接 · 全自动异步流水线",
-    version="2.1.0",
+    version="2.2.0",
+    lifespan=lifespan,
 )
 
 
@@ -279,15 +311,33 @@ async def generate_itinerary(req: ItineraryRequest):
 
     # --- 存储 + 生成分享链接 ---
     itinerary_id = uuid.uuid4().hex[:12]
-    record = {
-        "data": data,
-        "user_id": req.user_id,
-        "guide_name": req.guide_name,
-        "guide_wechat": req.guide_wechat,
-        "booking_aid": req.booking_aid,
-        "security_mode": req.security_mode,
-    }
-    DB_ITINERARIES[itinerary_id] = record
+
+    if database is not None:
+        await database.execute(
+            """
+            INSERT INTO itineraries (id, user_id, security_mode, booking_aid, guide_name, guide_wechat, structured_json)
+            VALUES (:id, :user_id, :security_mode, :booking_aid, :guide_name, :guide_wechat, :structured_json)
+            """,
+            {
+                "id": itinerary_id,
+                "user_id": req.user_id,
+                "security_mode": req.security_mode,
+                "booking_aid": req.booking_aid,
+                "guide_name": req.guide_name,
+                "guide_wechat": req.guide_wechat,
+                "structured_json": json.dumps(data, ensure_ascii=False),
+            },
+        )
+    else:
+        DB_ITINERARIES[itinerary_id] = {
+            "data": data,
+            "user_id": req.user_id,
+            "guide_name": req.guide_name,
+            "guide_wechat": req.guide_wechat,
+            "booking_aid": req.booking_aid,
+            "security_mode": req.security_mode,
+        }
+
     logger.info("Itinerary stored: id=%s user_id=%s days=%d cities=%s",
                 itinerary_id, req.user_id,
                 len(itinerary),
@@ -345,10 +395,29 @@ ERROR_HTML = """<!DOCTYPE html>
 async def share_itinerary(request: Request, itinerary_id: str):
     logger.info("Share request received: id=%s", itinerary_id)
 
-    record = DB_ITINERARIES.get(itinerary_id)
+    record = None
+    if database is not None:
+        row = await database.fetch_one(
+            "SELECT * FROM itineraries WHERE id = :id",
+            {"id": itinerary_id},
+        )
+        if row is not None:
+            structured = row["structured_json"]
+            if isinstance(structured, str):
+                structured = json.loads(structured)
+            record = {
+                "data": structured,
+                "user_id": row["user_id"],
+                "guide_name": row["guide_name"],
+                "guide_wechat": row["guide_wechat"],
+                "booking_aid": row["booking_aid"],
+                "security_mode": row["security_mode"],
+            }
+    else:
+        record = DB_ITINERARIES.get(itinerary_id)
+
     if not record:
-        logger.warning("Share 404: id=%s not found (total records=%d)",
-                       itinerary_id, len(DB_ITINERARIES))
+        logger.warning("Share 404: id=%s not found", itinerary_id)
         return HTMLResponse(content=NOT_FOUND_HTML, status_code=404)
 
     # 构建模板上下文
@@ -386,14 +455,32 @@ async def share_itinerary(request: Request, itinerary_id: str):
 
 
 # ===========================================================================
-# Health check
+# Root / Health
 # ===========================================================================
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "service": "EuroTour Hub API Gateway",
+        "version": "0.22-production",
+        "documentation": "https://travel-gqru.onrender.com/docs",
+    }
+
+
 @app.get("/health")
 async def health():
+    if database is not None:
+        try:
+            count = await database.fetch_val("SELECT COUNT(*) FROM itineraries")
+        except Exception:
+            count = -1
+    else:
+        count = len(DB_ITINERARIES)
     return {
         "status": "ok",
         "service": "itinerary-engine",
-        "stored": len(DB_ITINERARIES),
+        "storage": "postgresql" if database is not None else "memory",
+        "stored": count,
     }
 
 
