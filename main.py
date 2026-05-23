@@ -54,13 +54,22 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is required — PostgreSQL connection string must be set")
 
+# 兼容 Render / Railway 的 postgres:// 协议头
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 DEFAULT_BOOKING_AID = "QF_MAIN_DEFAULT_AID"
 
 # ===========================================================================
-# PostgreSQL 异步数据库连接池
+# PostgreSQL 异步连接池（针对 Supabase PgBouncer 调优）
 # ===========================================================================
-database = Database(DATABASE_URL)
-logger.info("Database instance initialized (will connect on startup)")
+database = Database(
+    DATABASE_URL,
+    min_size=2,             # 冷启动即保持 2 条长连接，消除首请求建连延迟
+    max_size=20,            # 生产并发峰值预留
+    command_timeout=30,     # 单条查询超时硬截止
+)
+logger.info("Database pool configured (min=2 max=20 timeout=30s)")
 
 # ===========================================================================
 # Async OpenAI client（全请求复用连接池）
@@ -144,15 +153,22 @@ def _prepare_context(
 
 
 # ===========================================================================
-# Lifespan — PostgreSQL 异步连接池生命周期
+# Lifespan — PostgreSQL 异步连接池生命周期（优化版）
 # ===========================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 启动阶段：建立连接池 + 健康验证
     await database.connect()
-    logger.info("PostgreSQL connected — %s", DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "supabase")
+    try:
+        # 验证连接可用性（Supabase PgBouncer 可能返回就绪但实际未路由）
+        await database.fetch_val("SELECT 1")
+        logger.info("PostgreSQL pool ready — %s", DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "connected")
+    except Exception:
+        logger.warning("Initial health ping failed — pool may still be warming; retrying on first request")
     yield
+    # 关闭阶段：优雅释放连接池
     await database.disconnect()
-    logger.info("PostgreSQL disconnected")
+    logger.info("PostgreSQL pool released")
 
 
 # ===========================================================================
@@ -215,7 +231,7 @@ class ErrorResponse(BaseModel):
     responses={500: {"model": ErrorResponse}},
     summary="生成行程并返回分享链接",
 )
-async def generate_itinerary(req: ItineraryRequest):
+async def generate_itinerary(req: ItineraryRequest, request: Request):
     logger.info("Generate request received: user_id=%s mode=%s text_len=%d",
                 req.user_id, req.security_mode, len(req.raw_text))
 
@@ -324,7 +340,7 @@ async def generate_itinerary(req: ItineraryRequest):
                 len(itinerary),
                 data.get("summary", {}).get("cities", []))
 
-    share_url = f"{BASE_URL}/share/{itinerary_id}"
+    share_url = f"{request.base_url}share/{itinerary_id}".replace("http://", "https://", 1)
     logger.info("Generate complete: id=%s share_url=%s", itinerary_id, share_url)
 
     return GenerateResponse(status="success", share_url=share_url)
