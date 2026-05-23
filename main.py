@@ -434,8 +434,9 @@ async def root():
     return {
         "status": "online",
         "service": "EuroTour Hub API Gateway",
-        "version": "3.0-production",
-        "documentation": "https://travel-gqru.onrender.com/docs",
+        "version": "3.1-production",
+        "commit": "f3e5b1c",
+        "documentation": "/docs",
     }
 
 
