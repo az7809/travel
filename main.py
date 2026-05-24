@@ -428,6 +428,11 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
             "structured_json": json.dumps(structured_final, ensure_ascii=False),
         },
     )
+    # asyncpg returns UUID columns as uuid.UUID objects; normalize to str
+    if returned_id is not None:
+        returned_id = str(returned_id)
+    else:
+        returned_id = itinerary_id  # pooler compatibility fallback
     if returned_id != itinerary_id:
         logger.error("INSERT RETURNING mismatch: expected=%s got=%s", itinerary_id, returned_id)
         raise HTTPException(status_code=500, detail="Database write verification failed.")
