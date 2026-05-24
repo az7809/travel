@@ -151,15 +151,96 @@ _IMAGE_CACHE: dict[str, str | None] = {}  # normalized name → url or None (neg
 _DEGRADATION_COUNT: int = 0               # cumulative fallback-to-Picsum counter
 
 
+# ── 中→英 景点搜索关键词映射（提升 Google API 查准率）──
+# 匹配规则：若 target_name 包含左列 key，则追加右列英文词到搜索 query。
+_ATTRACTION_EN_TERMS: dict[str, str] = {
+    # 巴黎
+    "巴黎圣母院": "Notre-Dame de Paris",
+    "卢浮宫": "Louvre Museum Paris",
+    "埃菲尔铁塔": "Eiffel Tower Paris",
+    "凯旋门": "Arc de Triomphe Paris",
+    "奥赛博物馆": "Musée d'Orsay Paris",
+    "圣心大教堂": "Sacré-Cœur Basilica Paris",
+    "先贤祠": "Panthéon Paris",
+    "荣军院": "Les Invalides Paris",
+    "蒙马特": "Montmartre Paris",
+    "凡尔赛宫": "Palace of Versailles",
+    # 罗马
+    "斗兽场": "Colosseum Rome",
+    "梵蒂冈博物馆": "Vatican Museums Rome",
+    "圣彼得大教堂": "St Peter's Basilica Vatican",
+    "许愿池": "Trevi Fountain Rome",
+    "万神殿": "Pantheon Rome",
+    "西班牙广场": "Spanish Steps Rome",
+    # 佛罗伦萨
+    "圣母百花大教堂": "Florence Cathedral Duomo",
+    "乌菲兹美术馆": "Uffizi Gallery Florence",
+    "大卫雕像": "Michelangelo David Florence",
+    "老桥": "Ponte Vecchio Florence",
+    # 威尼斯
+    "圣马可广场": "Piazza San Marco Venice",
+    "叹息桥": "Bridge of Sighs Venice",
+    "里亚托桥": "Rialto Bridge Venice",
+    # 米兰
+    "米兰大教堂": "Duomo di Milano Milan Cathedral",
+    "最后的晚餐": "The Last Supper Leonardo Milan",
+    # 巴塞罗那
+    "圣家堂": "Sagrada Familia Barcelona",
+    "桂尔公园": "Park Güell Barcelona",
+    "巴特罗之家": "Casa Batlló Barcelona",
+    "哥特区": "Gothic Quarter Barcelona",
+    # 阿姆斯特丹
+    "梵高博物馆": "Van Gogh Museum Amsterdam",
+    "国立博物馆": "Rijksmuseum Amsterdam",
+    "安妮之家": "Anne Frank House Amsterdam",
+    # 伦敦
+    "大英博物馆": "British Museum London",
+    # 意大利小镇
+    "比萨斜塔": "Leaning Tower of Pisa",
+    "五渔村": "Cinque Terre Italy",
+    "圣吉米尼亚诺": "San Gimignano Tuscany",
+    "锡耶纳": "Siena Tuscany",
+    "庞贝古城": "Pompeii Archaeological Site",
+    "马泰拉": "Matera Sassi Italy",
+    "阿尔贝罗贝洛": "Alberobello Trulli Italy",
+    # 瑞士
+    "卢塞恩": "Lucerne Switzerland",
+    "少女峰": "Jungfraujoch Switzerland",
+}
+
+# 合法图片后缀（防止 API 返回视频缩略图 / 非图片链接）
+_VALID_IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp"})
+
+
+def _build_search_query(target_name: str) -> str:
+    """构造 Google 搜索 query：中文名 + 英文术语 + landmark 信号词。
+
+    若 target_name 包含已知中文景点名，则自动追加对应英文搜索词，
+    大幅提升 Google Custom Search 对非拉丁字符景点名的查准率。
+    """
+    parts = [target_name]
+    for cn_key, en_term in _ATTRACTION_EN_TERMS.items():
+        if cn_key in target_name:
+            parts.append(en_term)
+            break
+    parts.append("landmark")
+    return " ".join(parts)
+
+
 # 建议在 Google Programmable Search Engine 控制面板中将以下域名加入"要搜索的网站"：
 #   unsplash.com/*, pixabay.com/*, wikipedia.org/*
 # 这样 API 结果会天然偏向高质量无版权图源。
 def _fetch_google_image_sync(target_name: str) -> str | None:
     """调用 Google Custom Search API 搜索实景图片。
 
-    在 q 参数中追加 quality 信号词提升搜索结果相关性。
-    失败时返回 None，调用方降级到 Picsum 兜底图源。
-    API 配额耗尽（403）或网络超时均被吞掉，不抛出异常。
+    查询策略：
+    1. 中文名自动追加英文术语 + "landmark" → 精准匹配
+    2. imgType=photo 过滤插画/动图/剪贴画
+    3. 优先提取 pagemap.cse_image[0].src（Google 标注的高清预览图）
+    4. fallback 到 items[0].link
+    5. 后缀白名单校验（jpg/jpeg/png/webp），不合法则降级
+
+    失败时返回 None，调用方降级到 Picsum。
     """
     global _DEGRADATION_COUNT
     if not _GOOGLE_IMAGE_ENABLED or not target_name:
@@ -168,7 +249,9 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
     cache_key = target_name.strip().lower()
     cached = _IMAGE_CACHE.get(cache_key)
     if cached is not None:
-        return cached  # may be str (positive) or None (negative cache hit)
+        return cached
+
+    query = _build_search_query(target_name)
 
     try:
         r = requests.get(
@@ -176,13 +259,14 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
             params={
                 "key": GOOGLE_API_KEY,
                 "cx": GOOGLE_CX,
-                "q": f"{target_name} landmark travel",
+                "q": query,
                 "searchType": "image",
                 "num": 1,
+                "imgType": "photo",       # 强制实景照片（排除 clipart/face/animated）
                 "imgSize": "xlarge",
                 "safe": "active",
             },
-            timeout=6,  # HTTP 层超时 6s（留给 asyncio 层的 4s 预算足够）
+            timeout=6,
         )
         if r.status_code == 403:
             logger.warning(
@@ -194,23 +278,63 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
             _IMAGE_CACHE[cache_key] = None
             return None
         r.raise_for_status()
-        items = r.json().get("items", [])
+        data = r.json()
+        items = data.get("items")
         if not items:
-            logger.info("[IMG_DEGRADE] Google API returned 0 results for %q — falling back to Picsum", target_name)
+            logger.info("[IMG_DEGRADE] Google API returned 0 results for %q → Picsum", target_name)
             _DEGRADATION_COUNT += 1
             _IMAGE_CACHE[cache_key] = None
             return None
-        url = items[0]["link"]
+
+        # ── 优先提取 pagemap.cse_image（Google 标注的高清预览图）──
+        url = None
+        try:
+            cse_src = (
+                items[0]
+                .get("pagemap", {})
+                .get("cse_image", [{}])[0]
+                .get("src", "")
+            )
+            if cse_src:
+                url = cse_src
+        except (IndexError, KeyError, TypeError):
+            pass
+
+        # fallback: 传统 link 字段
+        if not url:
+            url = items[0].get("link", "")
+
+        # ── URL 后缀白名单校验 ──
+        if url:
+            url_lower = url.lower()
+            # 截断 ? 后的 query string 再做后缀检测
+            path_part = url_lower.split("?")[0]
+            if not any(path_part.endswith(ext) for ext in _VALID_IMAGE_SUFFIXES):
+                logger.info(
+                    "[IMG_DEGRADE] Google returned non-image URL for %q "
+                    "(suffix not in %s): %s → Picsum",
+                    target_name, set(_VALID_IMAGE_SUFFIXES),
+                    url[:120],
+                )
+                _DEGRADATION_COUNT += 1
+                _IMAGE_CACHE[cache_key] = None
+                return None
+
+        if not url:
+            logger.info("[IMG_DEGRADE] Google returned empty URL for %q → Picsum", target_name)
+            _DEGRADATION_COUNT += 1
+            _IMAGE_CACHE[cache_key] = None
+            return None
+
         _IMAGE_CACHE[cache_key] = url
         logger.info("[IMG_OK] Google image resolved for %q (%d chars)", target_name, len(url))
         return url
     except requests.Timeout:
-        logger.info("[IMG_DEGRADE] Google API timeout (6s) for %q — falling back to Picsum", target_name)
+        logger.info("[IMG_DEGRADE] Google API timeout (6s) for %q → Picsum", target_name)
         _DEGRADATION_COUNT += 1
     except Exception as exc:
         logger.info(
-            "[IMG_DEGRADE] Google API unreachable for %q (%s: %s) — "
-            "falling back to Picsum | total degradations: %d",
+            "[IMG_DEGRADE] Google API unreachable for %q (%s: %s) → Picsum | degradations: %d",
             target_name, type(exc).__name__, exc,
             _DEGRADATION_COUNT + 1,
         )
