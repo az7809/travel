@@ -50,6 +50,12 @@ DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
+# Google Custom Search API（实景图片搜索，可选配置）
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
+GOOGLE_CX = os.environ.get("GOOGLE_CX", "")
+_GOOGLE_IMAGE_ENABLED = bool(GOOGLE_API_KEY and GOOGLE_CX)
+logger.info("Google Image Search: %s", "enabled" if _GOOGLE_IMAGE_ENABLED else "disabled — falling back to Picsum")
+
 if not DEEPSEEK_API_KEY:
     raise RuntimeError("DEEPSEEK_API_KEY or ANTHROPIC_API_KEY is required — check environment variables")
 
@@ -140,12 +146,81 @@ logger.info("Jinja2 environment loaded (%d template(s) in %s)",
             len(_jinja_env.list_templates()), TEMPLATES_DIR)
 
 
+# ── 图片缓存 & Google Custom Search API ──────────────────
+_IMAGE_CACHE: dict[str, str | None] = {}  # key: normalized name → url or None (negative cache)
+
+
+def _fetch_google_image_sync(target_name: str) -> str | None:
+    """同步调用 Google Custom Search API，返回实景图片直链。
+
+    失败时返回 None，调用方负责降级到 Picsum 兜底图源。
+    API 配额耗尽（403）或网络超时均被静默吞掉，不抛出异常。
+    """
+    if not _GOOGLE_IMAGE_ENABLED or not target_name:
+        return None
+
+    cache_key = target_name.strip().lower()
+    if cache_key in _IMAGE_CACHE:
+        return _IMAGE_CACHE[cache_key]
+
+    try:
+        r = requests.get(
+            "https://www.googleapis.com/customsearch/v1",
+            params={
+                "key": GOOGLE_API_KEY,
+                "cx": GOOGLE_CX,
+                "q": target_name,
+                "searchType": "image",
+                "num": 1,
+                "imgSize": "xlarge",
+            },
+            timeout=8,
+        )
+        if r.status_code == 403:
+            logger.warning("Google Image API quota exceeded (403) — falling back to Picsum")
+            _IMAGE_CACHE[cache_key] = None
+            return None
+        r.raise_for_status()
+        items = r.json().get("items", [])
+        if items:
+            url = items[0]["link"]
+            _IMAGE_CACHE[cache_key] = url
+            logger.info("Google Image found for %s", target_name)
+            return url
+    except Exception as exc:
+        logger.warning("Google Image fetch failed for %s: %s", target_name, exc)
+
+    _IMAGE_CACHE[cache_key] = None  # negative cache to avoid repeated failures
+    return None
+
+
+async def _prefetch_stop_images(itinerary: list[dict]) -> None:
+    """批量预加载所有 stop 的 Google 实景图片，注入 image_url 字段。
+
+    所有 API 调用通过 asyncio.to_thread 并发执行，
+    失败 stop 不写入 image_url，模板端自动降级到 Picsum。
+    """
+
+    async def _fetch_one(stop: dict) -> None:
+        name = stop.get("name", "")
+        if not name or "image_url" in stop:
+            return
+        url = await asyncio.to_thread(_fetch_google_image_sync, name)
+        if url:
+            stop["image_url"] = url
+
+    tasks = [_fetch_one(s) for day in itinerary for s in day.get("stops", [])]
+    if tasks:
+        await asyncio.gather(*tasks)
+        enriched = sum(1 for day in itinerary for s in day.get("stops", []) if "image_url" in s)
+        logger.info("Image pre-fetch complete: %d/%d stops enriched", enriched, len(tasks))
+
+
 # ── 模板辅助函数 & Jinja2 过滤器 ────────────────────────
 def get_image_for_target(target_name: str) -> str:
-    """返回 Picsum Photos 稳定高清图片直链（800×600）。
+    """Picsum 兜底图源（800×600 稳定随机图）。
 
-    使用 target_name 的确定性哈希值作为 seed，确保同一景点名
-    在页面中始终对应同一张图片。Picsum 是永久图源，不会下线。
+    仅当 Google API 未配置或预取失败时由模板端降级调用。
     """
     seed = abs(hash(target_name)) % 1000
     return f"https://picsum.photos/seed/{seed}/800/600?{quote(target_name)}"
@@ -1216,8 +1291,11 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
     # --- 静态数据库注入：免 Token 停车场数据 ---
     _enrich_parking_from_library(itinerary)
 
+    # --- Google 实景图片预加载（异步批量，失败自动降级 Picsum）---
+    await _prefetch_stop_images(itinerary)
+
     # --- 将导游信息嵌入 JSON，统一落盘 ---
-    structured_final = json.loads(content)
+    structured_final = data  # 使用已富化的 data（含停车场+图片URL），不重新解析
     structured_final["_guide_name"] = req.guide_name
     structured_final["_guide_wechat"] = req.guide_wechat
 

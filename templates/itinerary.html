@@ -217,9 +217,9 @@
       <!-- Content card -->
       <div class="bg-white rounded-xl card-shadow overflow-hidden border border-neutral-100 image-card">
 
-        <!-- Unsplash image -->
+        <!-- Image: Google API pre-fetched, fallback to Picsum -->
         {% if stop.name %}
-        <img src="{{ stop.name | unsplash }}"
+        <img src="{{ stop.image_url if stop.image_url else (stop.name | unsplash) }}"
              alt="{{ stop.name }}"
              class="w-full h-56 object-cover"
              loading="lazy"
