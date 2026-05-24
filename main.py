@@ -142,12 +142,13 @@ logger.info("Jinja2 environment loaded (%d template(s) in %s)",
 
 # ── 模板辅助函数 & Jinja2 过滤器 ────────────────────────
 def get_image_for_target(target_name: str) -> str:
-    """返回 Unsplash 高清图片直链（Featured 精选集）。
+    """返回 Picsum Photos 稳定高清图片直链（800×600）。
 
-    source.unsplash.com 根据关键词自动匹配高质量摄影作品，
-    浏览器跟随 302 重定向到最终 CDN 图片 URL。
+    使用 target_name 的确定性哈希值作为 seed，确保同一景点名
+    在页面中始终对应同一张图片。Picsum 是永久图源，不会下线。
     """
-    return f"https://source.unsplash.com/featured/?{quote(target_name)}&w=800&h=600"
+    seed = abs(hash(target_name)) % 1000
+    return f"https://picsum.photos/seed/{seed}/800/600?{quote(target_name)}"
 
 
 _jinja_env.filters["unsplash"] = get_image_for_target
