@@ -72,9 +72,16 @@
   #contactBubble {
     transition: opacity 0.5s ease, transform 0.5s ease;
   }
+  /* Anti-scraping */
+  body {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
 </style>
 </head>
-<body class="bg-neutral-50 font-sans text-neutral-900 antialiased">
+<body class="bg-neutral-50 font-sans text-neutral-900 antialiased" oncontextmenu="return false" ondragstart="return false" onselectstart="return false" oncopy="return false" oncut="return false">
 
 <!-- ====== Guide White-Label Top Bar ====== -->
 {% if guide_name %}
@@ -518,6 +525,19 @@
 </div>
 
 <script>
+// ── 防爬虫：禁止键盘快捷键 ──
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C' || e.key === 'u' || e.key === 'U' || e.key === 's' || e.key === 'S' || e.key === 'a' || e.key === 'A' || e.key === 'p' || e.key === 'P')) {
+    e.preventDefault(); return false;
+  }
+  if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'))) {
+    e.preventDefault(); return false;
+  }
+});
+document.addEventListener('copy', function(e) { e.preventDefault(); return false; });
+document.addEventListener('cut', function(e) { e.preventDefault(); return false; });
+
+// ── 悬浮联系气泡 ──
 (function() {
   var bubble = document.getElementById('contactBubble');
   var shown = false;
