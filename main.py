@@ -564,8 +564,8 @@ async def guide_entrance_page(request: Request):
         <div class="github-bg-card border github-border rounded-xl p-6 sm:p-8 shadow-sm">
 
             <div class="border-b github-border pb-4 mb-6">
-                <h2 class="text-xl font-bold text-[#1f2328]">Create New Base Itinerary</h2>
-                <p class="text-sm text-[#57606a] mt-1.5">通过精简的指令自动化渲染云原生分布式客户行程单</p>
+                <h2 class="text-xl font-bold text-[#1f2328]">欧洲司导行程单生成系统 <span class="text-sm font-normal text-[#57606a]">· Itinerary Generator</span></h2>
+                <p class="text-sm text-[#57606a] mt-1.5">微信聊天记录 → AI 结构化编译 → 白标 H5 分享页 · Chat logs → AI compile → white-label share page</p>
             </div>
 
             <form id="orderForm" class="space-y-6">
@@ -583,7 +583,7 @@ async def guide_entrance_page(request: Request):
                 <input type="hidden" id="securityMode" value="standard">
 
                 <div class="space-y-2.5">
-                    <label class="block text-sm font-bold text-[#1f2328]">散客原始意向数据 (Raw Prompt Data)</label>
+                    <label class="block text-sm font-bold text-[#1f2328]">客户原始意向数据 / Raw Client Inquiry</label>
                     <textarea id="rawText" required rows="7"
                               placeholder="直接将微信聊天记录或零碎想法粘贴至此。例如：5月24号去巴黎，想看巴黎圣母院内部入内讲解，下午去看埃菲尔铁塔。推荐周边步行可达、Google Map好评最高的法餐厅..."
                               class="w-full border github-border rounded-lg p-3.5 text-base github-input transition-all leading-relaxed code-font resize-none"></textarea>
@@ -591,7 +591,7 @@ async def guide_entrance_page(request: Request):
 
                 <div class="pt-2">
                     <button type="submit" class="w-full sm:w-auto px-6 py-2.5 bg-[#2da44e] hover:bg-[#2c974b] text-white font-semibold text-sm rounded-lg border border-[rgba(27,31,36,0.15)] transition-all cursor-pointer shadow-sm">
-                        Run Build Script
+                        生成行程单 / Generate
                     </button>
                 </div>
             </form>
@@ -629,7 +629,7 @@ async def guide_entrance_page(request: Request):
             const btn = e.target.querySelector('button[type="submit"]');
             btn.disabled = true;
             btn.className = "w-full sm:w-auto px-6 py-2.5 bg-[#eaeef2] text-[#57606a] border github-border text-sm rounded-lg cursor-not-allowed font-mono animate-pulse";
-            btn.innerText = "Executing deepseek-compiler...";
+            btn.innerText = "AI 编译中 / Compiling...";
 
             const payload = {
                 user_id: document.getElementById('userId').value.trim(),
@@ -658,7 +658,7 @@ async def guide_entrance_page(request: Request):
                 alert('Error: ' + err.message);
             } finally {
                 btn.className = "w-full sm:w-auto px-6 py-2.5 bg-[#2da44e] hover:bg-[#2c974b] text-white font-semibold text-sm rounded-lg border border-[rgba(27,31,36,0.15)] transition-all cursor-pointer shadow-sm";
-                btn.innerText = "Run Build Script";
+                btn.innerText = "生成行程单 / Generate";
             }
         });
 
