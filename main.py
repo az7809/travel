@@ -1693,16 +1693,24 @@ async def guide_entrance_page(request: Request):
 
             <form id="orderForm" class="space-y-6">
 
-                <div class="space-y-2.5">
+                <div class="space-y-3">
                     <label class="block text-sm font-bold text-[#1f2328]">导游信息 (Guide Metadata)</label>
-                    <input type="text" id="userId" required
-                           placeholder="例如：向导Alex (微信: alex_paris / 电话: +33 6 123456)"
-                           class="w-full border github-border rounded-lg px-3.5 py-3 text-base github-input transition-all">
-                    <p class="text-xs text-[#57606a]">这些信息将作为动态白标直接注入到给客户浏览的网页最上方。</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <input type="text" id="guideName"
+                               placeholder="姓名，如 Marco"
+                               class="w-full border github-border rounded-lg px-3.5 py-3 text-base github-input transition-all">
+                        <input type="text" id="guidePhone"
+                               placeholder="电话，如 +39 123 456 789"
+                               class="w-full border github-border rounded-lg px-3.5 py-3 text-base github-input transition-all">
+                        <input type="text" id="guideWechat"
+                               placeholder="微信，如 marco_italia"
+                               class="w-full border github-border rounded-lg px-3.5 py-3 text-base github-input transition-all">
+                    </div>
+                    <p class="text-xs text-[#57606a]">这些信息将作为动态白标直接注入到给客户浏览的网页最上方。电话号自动生成拨打链接。</p>
                 </div>
 
+                <input type="hidden" id="userId" value="web_console_01">
                 <input type="hidden" id="bookingAid" value="default_platform_partner">
-
                 <input type="hidden" id="securityMode" value="standard">
 
                 <div class="space-y-2.5">
@@ -1758,7 +1766,10 @@ async def guide_entrance_page(request: Request):
                 user_id: document.getElementById('userId').value.trim(),
                 raw_text: document.getElementById('rawText').value.trim(),
                 security_mode: document.getElementById('securityMode').value,
-                booking_aid: document.getElementById('bookingAid').value.trim()
+                booking_aid: document.getElementById('bookingAid').value.trim(),
+                guide_name: document.getElementById('guideName').value.trim() || null,
+                guide_phone: document.getElementById('guidePhone').value.trim() || null,
+                guide_wechat: document.getElementById('guideWechat').value.trim() || null,
             };
 
             try {
