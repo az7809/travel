@@ -430,6 +430,51 @@
 </section>
 {% endif %}
 
+<!-- ====== Pricing Breakdown ====== -->
+{% if quote %}
+<section class="mt-8 mb-5">
+  <div class="bg-white rounded-2xl card-shadow overflow-hidden border border-blush/30">
+    <div class="px-5 py-4 border-b border-blush/20 bg-gradient-to-r from-white to-cream">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">💶</span>
+        <h2 class="font-serif text-lg font-semibold text-ink">报价明细</h2>
+        <span class="ml-auto text-sm text-warm/50">{{ quote.days|length }} 天</span>
+      </div>
+    </div>
+    <!-- Per-day rows -->
+    <div class="divide-y divide-blush/10">
+      {% for qd in quote.days %}
+      <div class="px-5 py-3 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-3">
+          <span class="font-serif text-lg font-bold text-gold w-6">{{ qd.day }}</span>
+          <div>
+            <p class="text-sm text-warm/60">{{ qd.country }} · {{ qd.mileage_km }} km</p>
+          </div>
+        </div>
+        <div class="text-right">
+          <p class="text-sm font-medium text-ink">车费 €{{ qd.vehicle_eur }} + 住宿 €{{ qd.accommodation_eur }}</p>
+          <p class="text-sm font-bold text-gold">€{{ qd.day_total_eur }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <!-- Grand total -->
+    <div class="px-5 py-4 bg-cream/50 border-t border-blush/20">
+      <div class="flex items-center justify-between">
+        <div class="text-sm text-warm/60 space-y-0.5">
+          <p>车辆费用: €{{ quote.total_vehicle_eur }}</p>
+          <p>司导住宿: €{{ quote.total_accommodation_eur }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-sm text-warm/50">总计</p>
+          <p class="font-serif text-2xl font-bold text-ink">€{{ quote.grand_total_eur }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <!-- ====== Hotel Disclaimer ====== -->
 <section class="mt-8 mb-12">
   <div class="bg-white/60 backdrop-blur rounded-2xl px-5 py-5 card-shadow border border-blush/50">

@@ -166,6 +166,7 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
       "day": 1,
       "date": "2026-06-15",
       "city": "Paris",
+      "country": "France",
       "headline": "巴黎历史高光与圣母院深度私享",
       "stops": [
         {
@@ -186,6 +187,7 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
         }
       ],
       "driving_hours": 1.5,
+      "daily_mileage_km": 45,
       "total_work_hours": 8.0,
       "hotel_zone": "5区拉丁区，Booking 参考价 €180-250/晚",
       "hotel_features": ["厨房", "空调", "电梯"],
@@ -255,6 +257,7 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
 - `day`: 从 1 开始的行程天数
 - `date`: 如果能推断出具体日期就用 YYYY-MM-DD，否则用 "Day-N"
 - `city`: 城市名，用英文标准名
+- `country`: 国家名，用英文标准名（如 France / Italy / Switzerland / Norway / Iceland）。**报价引擎依赖此字段**判断司导住宿费率。
 - `headline`: 当天一句话主题标语，中文，有画面感（如"巴黎历史高光与圣母院深度私享"）
 - `stops`: 当天所有停留点（景点、餐厅、休息站），含到达/离开时间和停留时长
   - `name`: 景点名称（中文，重要地标中英对照）
@@ -263,6 +266,7 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
   - `duration_min`: 停留分钟数
   - `notes`: 司导讲解内容（150-300 字），包含：历史背景、实用避坑提示、🚫闭馆日警告（如适用）
 - `driving_hours`: 当天纯驾驶时间（小时），不含休息
+- `daily_mileage_km`: **（报价核心字段）** 当天预估行驶里程（公里）。根据城市间距离和景点间移动距离估算。欧洲高速平均时速约 80km/h，市区约 30km/h。此字段直接影响报价，必须合理估算。
 - `total_work_hours`: 当天总工时，从第一个 stop 的 arrival 到最后 stop 的 departure 外加 30 分钟收尾
 - `hotel_zone`: 推荐住宿区域 + Booking 参考价格区间。**绝对不要给具体的酒店名称，只说区域。**
 - `hotel_features`: 客户要求的酒店设施（从聊天记录提取）

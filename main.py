@@ -313,6 +313,82 @@ async def _fetch_day_images(days: list[dict]) -> dict[int, list[dict]]:
 
 
 # ===========================================================================
+# 报价计算引擎
+# ===========================================================================
+# 高住宿费国家（瑞士 / 挪威 / 冰岛）
+_HIGH_ACCOMMODATION_COUNTRIES = frozenset({"Switzerland", "Norway", "Iceland"})
+
+
+def _vehicle_cost_per_day(mileage_km: float) -> int:
+    """单日车费：
+    ≤100 km → €450
+    100-350 km → €550
+    >350 km → €650
+    """
+    if mileage_km <= 100:
+        return 450
+    elif mileage_km <= 350:
+        return 550
+    else:
+        return 650
+
+
+def _accommodation_cost_per_night(country: str) -> int:
+    """司导住宿费/晚：
+    瑞士/挪威/冰岛 → €120
+    其余欧洲国家 → €100
+    """
+    return 120 if country in _HIGH_ACCOMMODATION_COUNTRIES else 100
+
+
+def calculate_quote(days: list[dict]) -> dict:
+    """根据每日里程和国家计算总报价。
+
+    Returns:
+        {
+            "days": [{"day": 1, "mileage_km": 45, "country": "France",
+                       "vehicle_eur": 450, "accommodation_eur": 100,
+                       "day_total_eur": 550}, ...],
+            "total_vehicle_eur": 1350,
+            "total_accommodation_eur": 300,
+            "grand_total_eur": 1650,
+        }
+    """
+    quote_days = []
+    total_vehicle = 0
+    total_accommodation = 0
+
+    for d in days:
+        mileage = d.get("daily_mileage_km", 0)
+        if not isinstance(mileage, (int, float)) or mileage < 0:
+            mileage = d.get("driving_hours", 0) * 55  # fallback: 55 km/h 估算
+
+        country = d.get("country", "").strip()
+
+        vehicle = _vehicle_cost_per_day(mileage)
+        accommodation = _accommodation_cost_per_night(country) if country else 100
+
+        total_vehicle += vehicle
+        total_accommodation += accommodation
+
+        quote_days.append({
+            "day": d.get("day", "?"),
+            "mileage_km": round(mileage, 1),
+            "country": country or "未指定",
+            "vehicle_eur": vehicle,
+            "accommodation_eur": accommodation,
+            "day_total_eur": vehicle + accommodation,
+        })
+
+    return {
+        "days": quote_days,
+        "total_vehicle_eur": total_vehicle,
+        "total_accommodation_eur": total_accommodation,
+        "grand_total_eur": total_vehicle + total_accommodation,
+    }
+
+
+# ===========================================================================
 # Lifespan — PostgreSQL 异步连接池生命周期（Render 冷启动容错）
 # ===========================================================================
 @asynccontextmanager
@@ -622,6 +698,14 @@ async def share_itinerary(request: Request, itinerary_id: str):
     except Exception as exc:
         logger.warning("Image fetch skipped for id=%s: %s", itinerary_id, exc)
         context["day_images"] = {}
+
+    # 报价计算
+    try:
+        quote = calculate_quote(context["days"])
+        context["quote"] = quote
+    except Exception as exc:
+        logger.warning("Quote calculation skipped for id=%s: %s", itinerary_id, exc)
+        context["quote"] = None
 
     # Jinja2 实时渲染
     try:
