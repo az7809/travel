@@ -219,6 +219,9 @@ def _prepare_context(
 # 景点图片抓取（Wikipedia REST API，免费无 Key）
 # ===========================================================================
 WIKI_API = "https://en.wikipedia.org/w/api.php"
+WIKI_HEADERS = {
+    "User-Agent": "EuroTourHub/3.1 (https://github.com/az7809/travel; itinerary@eurotourhub.dev)",
+}
 
 
 def _fetch_images_for_attraction(name: str) -> list[str]:
@@ -238,7 +241,7 @@ def _fetch_images_for_attraction(name: str) -> list[str]:
             "namespace": 0,
             "format": "json",
         }
-        r = requests.get(WIKI_API, params=search_params, timeout=8)
+        r = requests.get(WIKI_API, params=search_params, headers=WIKI_HEADERS, timeout=8)
         r.raise_for_status()
         data = r.json()
         titles = data[1] if len(data) > 1 else []
@@ -254,7 +257,7 @@ def _fetch_images_for_attraction(name: str) -> list[str]:
             "pithumbsize": 800,
             "format": "json",
         }
-        r2 = requests.get(WIKI_API, params=img_params, timeout=8)
+        r2 = requests.get(WIKI_API, params=img_params, headers=WIKI_HEADERS, timeout=8)
         r2.raise_for_status()
         pages = r2.json().get("query", {}).get("pages", {})
         for page in pages.values():
