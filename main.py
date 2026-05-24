@@ -149,6 +149,7 @@ logger.info("Jinja2 environment loaded (%d template(s) in %s)",
 # ── 图片缓存 & Google Custom Search API ──────────────────
 _IMAGE_CACHE: dict[str, str | None] = {}  # normalized name → url or None (negative cache)
 _DEGRADATION_COUNT: int = 0               # cumulative fallback-to-Picsum counter
+_WIKI_SEMAPHORE = asyncio.Semaphore(4)    # limit concurrent Wikipedia API calls to avoid 429
 
 
 # ── 中→英 景点搜索关键词映射（提升 Google API 查准率）──
@@ -156,56 +157,58 @@ _DEGRADATION_COUNT: int = 0               # cumulative fallback-to-Picsum counte
 _ATTRACTION_EN_TERMS: dict[str, str] = {
     # 巴黎
     "巴黎圣母院": "Notre-Dame de Paris",
-    "卢浮宫": "Louvre Museum Paris",
-    "埃菲尔铁塔": "Eiffel Tower Paris",
-    "凯旋门": "Arc de Triomphe Paris",
-    "奥赛博物馆": "Musée d'Orsay Paris",
-    "圣心大教堂": "Sacré-Cœur Basilica Paris",
-    "先贤祠": "Panthéon Paris",
-    "荣军院": "Les Invalides Paris",
-    "蒙马特": "Montmartre Paris",
+    "卢浮宫": "Louvre Museum",
+    "埃菲尔铁塔": "Eiffel Tower",
+    "凯旋门": "Arc de Triomphe",
+    "奥赛博物馆": "Musee d'Orsay",
+    "圣心大教堂": "Sacre-Coeur Paris",
+    "先贤祠": "Pantheon Paris",
+    "荣军院": "Les Invalides",
+    "蒙马特": "Montmartre",
     "凡尔赛宫": "Palace of Versailles",
     # 罗马
-    "斗兽场": "Colosseum Rome",
-    "梵蒂冈博物馆": "Vatican Museums Rome",
-    "圣彼得大教堂": "St Peter's Basilica Vatican",
-    "许愿池": "Trevi Fountain Rome",
+    "斗兽场": "Colosseum",
+    "梵蒂冈博物馆": "Vatican Museums",
+    "圣彼得大教堂": "St Peter Basilica",
+    "许愿池": "Trevi Fountain",
     "万神殿": "Pantheon Rome",
-    "西班牙广场": "Spanish Steps Rome",
+    "西班牙广场": "Spanish Steps",
     # 佛罗伦萨
-    "圣母百花大教堂": "Florence Cathedral Duomo",
-    "乌菲兹美术馆": "Uffizi Gallery Florence",
-    "大卫雕像": "Michelangelo David Florence",
-    "老桥": "Ponte Vecchio Florence",
+    "圣母百花大教堂": "Florence Cathedral",
+    "乌菲兹美术馆": "Uffizi Gallery",
+    "大卫雕像": "Michelangelo David",
+    "老桥": "Ponte Vecchio",
     # 威尼斯
-    "圣马可广场": "Piazza San Marco Venice",
-    "叹息桥": "Bridge of Sighs Venice",
-    "里亚托桥": "Rialto Bridge Venice",
+    "圣马可广场": "Piazza San Marco",
+    "叹息桥": "Bridge of Sighs",
+    "里亚托桥": "Rialto Bridge",
     # 米兰
-    "米兰大教堂": "Duomo di Milano Milan Cathedral",
-    "最后的晚餐": "The Last Supper Leonardo Milan",
+    "米兰大教堂": "Milan Cathedral",
+    "最后的晚餐": "The Last Supper Leonardo",
     # 巴塞罗那
-    "圣家堂": "Sagrada Familia Barcelona",
-    "桂尔公园": "Park Güell Barcelona",
-    "巴特罗之家": "Casa Batlló Barcelona",
+    "圣家堂": "Sagrada Familia",
+    "桂尔公园": "Park Guell",
+    "巴特罗之家": "Casa Batllo",
     "哥特区": "Gothic Quarter Barcelona",
     # 阿姆斯特丹
-    "梵高博物馆": "Van Gogh Museum Amsterdam",
-    "国立博物馆": "Rijksmuseum Amsterdam",
-    "安妮之家": "Anne Frank House Amsterdam",
+    "梵高博物馆": "Van Gogh Museum",
+    "国立博物馆": "Rijksmuseum",
+    "安妮之家": "Anne Frank House",
     # 伦敦
-    "大英博物馆": "British Museum London",
+    "大英博物馆": "British Museum",
     # 意大利小镇
     "比萨斜塔": "Leaning Tower of Pisa",
-    "五渔村": "Cinque Terre Italy",
-    "圣吉米尼亚诺": "San Gimignano Tuscany",
-    "锡耶纳": "Siena Tuscany",
-    "庞贝古城": "Pompeii Archaeological Site",
-    "马泰拉": "Matera Sassi Italy",
-    "阿尔贝罗贝洛": "Alberobello Trulli Italy",
+    "五渔村": "Cinque Terre",
+    "圣吉米尼亚诺": "San Gimignano",
+    "锡耶纳": "Siena Italy",
+    "庞贝古城": "Pompeii",
+    "马泰拉": "Matera Italy",
+    "阿尔贝罗贝洛": "Alberobello",
     # 瑞士
-    "卢塞恩": "Lucerne Switzerland",
-    "少女峰": "Jungfraujoch Switzerland",
+    "卢塞恩": "Lucerne",
+    "少女峰": "Jungfraujoch",
+    # 尼斯
+    "尼斯": "Nice France",
 }
 
 # 合法图片后缀（防止 API 返回视频缩略图 / 非图片链接）
@@ -343,10 +346,10 @@ async def _prefetch_stop_images(itinerary: list[dict]) -> None:
 
     async def _fetch_one(stop: dict) -> None:
         name = stop.get("name", "")
-        if not name or "image_url" in stop:
+        if not name or stop.get("image_url"):
             return
 
-        # 检查缓存（命中则直接使用，包括 negative 缓存让后续调用跳过）
+        # 检查缓存（命中则直接使用）
         cache_key = name.strip().lower()
         cached = _IMAGE_CACHE.get(cache_key)
         if cached is not None:
@@ -355,11 +358,12 @@ async def _prefetch_stop_images(itinerary: list[dict]) -> None:
 
         url = None
         try:
-            # Tier 1: Wikipedia（免费、高相关性、稳定）
-            url = await asyncio.wait_for(
-                asyncio.to_thread(_fetch_wikipedia_image, name),
-                timeout=PER_STOP_TIMEOUT,
-            )
+            # Tier 1: Wikipedia（信号量限流 4 并发，避免 429）
+            async with _WIKI_SEMAPHORE:
+                url = await asyncio.wait_for(
+                    asyncio.to_thread(_fetch_wikipedia_image, name),
+                    timeout=PER_STOP_TIMEOUT,
+                )
         except asyncio.TimeoutError:
             pass
         except Exception:
@@ -497,10 +501,22 @@ WIKI_HEADERS = {
 }
 
 
+def _build_wiki_query(target_name: str) -> str:
+    """构造 Wikipedia 搜索 query（纯英文，不含中文以避免 0 结果）。
+
+    从 _ATTRACTION_EN_TERMS 匹配英文术语，未匹配时直接使用原文。
+    Wikipedia 的 search API 无法处理 CJK 字符混排。
+    """
+    for cn_key, en_term in _ATTRACTION_EN_TERMS.items():
+        if cn_key in target_name:
+            return en_term
+    return target_name
+
+
 def _fetch_wikipedia_image(title_or_name: str) -> str | None:
     """从 Wikipedia 获取景点主图（免费、无 Key、高相关性）。
 
-    使用 _build_search_query() 构造英文查询 → Wikipedia search API 定位词条
+    使用 _build_wiki_query() 构造纯英文查询 → Wikipedia search API 定位词条
     → pageimages API 提取 800px 主图。失败返回 None。
 
     注意：此函数只写成功缓存，不写 negative cache（失败时不应阻断
@@ -510,8 +526,8 @@ def _fetch_wikipedia_image(title_or_name: str) -> str | None:
         return None
 
     try:
-        # Step 1: 用英文 query 搜索最匹配的 Wikipedia 词条
-        query = _build_search_query(title_or_name)
+        # Step 1: 用纯英文 query 搜索最匹配的 Wikipedia 词条
+        query = _build_wiki_query(title_or_name)
         search_params = {
             "action": "query",
             "list": "search",
