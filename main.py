@@ -87,22 +87,29 @@ logger.info("Database pool configured (min=2 max=20 timeout=30s)")
 async def ensure_db_connected():
     """Auto-reconnect sentinel — guards against Supavisor cold-start / idle timeout.
 
-    When the database pool is idle for extended periods, Supavisor session pooler
-    may silently close connections.  This sentinel checks ``database.is_connected``
-    before every DB-bound request and reconnects if needed, preventing spurious
-    500s from ConnectionRefusedError / ConnectionClosedError.
+    Uses an actual ``SELECT 1`` health ping rather than the unreliable
+    ``database.is_connected`` flag.  Supavisor session pooler can report
+    ``is_connected=False`` even when the underlying TCP socket is healthy,
+    or vice versa — only a query proves the connection is really alive.
     """
-    if not database.is_connected:
-        logger.warning("[DB_RECOVERY] Database is not running! Attempting emergency auto-reconnect...")
-        try:
-            await asyncio.wait_for(database.connect(), timeout=10.0)
-            logger.info("[DB_RECOVERY] Emergency database connection established successfully!")
-        except Exception as exc:
-            logger.error("[DB_RECOVERY] Auto-reconnect failed: %s", exc)
-            raise HTTPException(
-                status_code=503,
-                detail="Database Service Temporarily Unavailable.",
-            )
+    # Fast path: a live query means the pool is healthy
+    try:
+        await database.fetch_val("SELECT 1")
+        return
+    except Exception:
+        pass  # connection truly dead — attempt reconnect below
+
+    logger.warning("[DB_RECOVERY] Connection dead — attempting emergency reconnect...")
+    try:
+        await asyncio.wait_for(database.connect(), timeout=10.0)
+        await database.fetch_val("SELECT 1")
+        logger.info("[DB_RECOVERY] Reconnect + health ping succeeded")
+    except Exception as exc:
+        logger.error("[DB_RECOVERY] Auto-reconnect failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Database Service Temporarily Unavailable.",
+        )
 
 
 # ===========================================================================
