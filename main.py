@@ -413,13 +413,12 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
     # --- PostgreSQL 写入 + 生成分享链接 ---
     itinerary_id = str(uuid.uuid4())
 
-    query = """
+    insert_query = """
     INSERT INTO itineraries (id, user_id, security_mode, booking_aid, structured_json)
     VALUES (:id, :user_id, :security_mode, :booking_aid, :structured_json)
-    RETURNING id
     """
-    returned_id = await database.fetch_val(
-        query=query,
+    await database.execute(
+        query=insert_query,
         values={
             "id": itinerary_id,
             "user_id": req.user_id,
@@ -428,15 +427,15 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
             "structured_json": json.dumps(structured_final, ensure_ascii=False),
         },
     )
-    # asyncpg returns UUID columns as uuid.UUID objects; normalize to str
-    if returned_id is not None:
-        returned_id = str(returned_id)
-    else:
-        returned_id = itinerary_id  # pooler compatibility fallback
-    if returned_id != itinerary_id:
-        logger.error("INSERT RETURNING mismatch: expected=%s got=%s", itinerary_id, returned_id)
-        raise HTTPException(status_code=500, detail="Database write verification failed.")
 
+    # Lightweight verification: SELECT the row we just inserted
+    verify = await database.fetch_val(
+        "SELECT id FROM itineraries WHERE id = :id",
+        values={"id": itinerary_id},
+    )
+    if verify is None:
+        logger.error("INSERT verification failed: id=%s not found after write", itinerary_id)
+        raise HTTPException(status_code=500, detail="Database write verification failed.")
     logger.info("Itinerary stored: id=%s user_id=%s days=%d cities=%s",
                 itinerary_id, req.user_id,
                 len(itinerary),
