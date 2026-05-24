@@ -139,6 +139,20 @@ _jinja_env = Environment(
 logger.info("Jinja2 environment loaded (%d template(s) in %s)",
             len(_jinja_env.list_templates()), TEMPLATES_DIR)
 
+
+# ── 模板辅助函数 & Jinja2 过滤器 ────────────────────────
+def get_image_for_target(target_name: str) -> str:
+    """返回 Unsplash 高清图片直链（Featured 精选集）。
+
+    source.unsplash.com 根据关键词自动匹配高质量摄影作品，
+    浏览器跟随 302 重定向到最终 CDN 图片 URL。
+    """
+    return f"https://source.unsplash.com/featured/?{quote(target_name)}&w=800&h=600"
+
+
+_jinja_env.filters["unsplash"] = get_image_for_target
+_jinja_env.filters["urlencode"] = lambda s: quote(str(s))
+
 # ===========================================================================
 # 上下文构建
 # ===========================================================================
@@ -1306,13 +1320,7 @@ async def share_itinerary(request: Request, itinerary_id: str):
                      itinerary_id, exc, traceback.format_exc())
         return HTMLResponse(content=ERROR_HTML, status_code=500)
 
-    # 抓取每日景点代表性图片（Wikipedia API，并发非阻塞）
-    try:
-        day_images = await _fetch_day_images(context["days"])
-        context["day_images"] = day_images
-    except Exception as exc:
-        logger.warning("Image fetch skipped for id=%s: %s", itinerary_id, exc)
-        context["day_images"] = {}
+    # 图片由客户端 Unsplash 直连加载，无需服务端预取
 
     # 报价计算
     try:
