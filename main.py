@@ -465,79 +465,90 @@ async def guide_entrance_page(request: Request):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>欧洲全景司导云端开单工作台</title>
+    <title>Repository / Tour-Workbench</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap">
     <style>
-        body { font-family: 'Inter', system-ui, sans-serif; }
-        .glow-btn:hover { box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background-color: #0d1117; }
+        .code-font { font-family: 'Fira Code', monospace; }
+        .github-border { border-color: #30363d; }
+        .github-bg-card { background-color: #161b22; }
+        .github-input:focus { border-color: #58a6ff; outline: none; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15); }
     </style>
 </head>
-<body class="bg-neutral-950 text-neutral-100 min-h-screen flex flex-col justify-between pb-8">
+<body class="text-[#c9d1d9] min-h-screen flex flex-col justify-between antialiased">
 
-    <header class="max-w-xl w-full mx-auto px-6 pt-12 text-center space-y-2">
-        <div class="inline-flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">B2B2C Cloud Workbench v3.5</span>
+    <header class="border-b github-border bg-[#161b22]/50 px-4 py-4 sm:px-16">
+        <div class="max-w-3xl mx-auto flex items-center space-x-2 text-sm">
+            <svg class="w-4 h-4 text-[#8b949e]" viewBox="0 0 16 16" version="1.1" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"></path></svg>
+            <span class="font-semibold text-[#58a6ff] hover:underline cursor-pointer">EuroTourHub</span>
+            <span class="text-[#8b949e]">/</span>
+            <span class="font-bold text-[#f0f6fc] code-font">itinerary-compiler</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium github-border border text-[#8b949e] bg-[#21262d]">Public</span>
         </div>
-        <h1 class="text-xl font-black tracking-tight text-neutral-50">欧洲向导极速开单系统</h1>
-        <p class="text-xs text-neutral-400">粘贴散客原始意向大白话，AI 自动清洗并注入高分 Google Map 餐饮底座</p>
     </header>
 
-    <main class="max-w-xl w-full mx-auto px-6 my-auto pt-6">
-        <form id="orderForm" class="bg-neutral-900 border border-neutral-800/80 rounded-2xl p-6 space-y-5 shadow-2xl">
+    <main class="max-w-3xl w-full mx-auto px-4 py-12 flex-1">
+        <div class="github-bg-card border github-border rounded-xl p-6 sm:p-8 shadow-md">
 
-            <div class="grid grid-cols-2 gap-4">
-                <div class="space-y-1.5">
-                    <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">向导工号 (User ID)</label>
-                    <input type="text" id="userId" required placeholder="如: Paris_Alex_666"
-                           class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors">
+            <div class="border-b github-border pb-4 mb-6">
+                <h2 class="text-lg font-semibold text-[#f0f6fc]">Create New Base Itinerary</h2>
+                <p class="text-xs text-[#8b949e] mt-1">通过精简的指令自动化渲染云原生分布式客户行程单</p>
+            </div>
+
+            <form id="orderForm" class="space-y-6">
+
+                <div class="space-y-2">
+                    <label class="block text-xs font-semibold text-[#f0f6fc]">导游信息 (Guide Metadata)</label>
+                    <input type="text" id="userId" required
+                           placeholder="例如：向导Alex (微信: alex_paris / 电话: +33 6 123456)"
+                           class="w-full bg-[#0d1117] border github-border rounded-lg px-3 py-2 text-sm text-[#c9d1d9] github-input transition-all">
+                    <p class="text-[11px] text-[#8b949e]">这些信息将作为动态白标直接注入到给客户浏览的网页最上方。</p>
                 </div>
-                <div class="space-y-1.5">
-                    <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">分销追踪码 (Booking AID)</label>
-                    <input type="text" id="bookingAid" required placeholder="如: alex_vip_partner"
-                           class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors">
+
+                <input type="hidden" id="bookingAid" value="default_platform_partner">
+
+                <input type="hidden" id="securityMode" value="standard">
+
+                <div class="space-y-2">
+                    <label class="block text-xs font-semibold text-[#f0f6fc]">散客原始意向数据 (Raw Prompt Data)</label>
+                    <textarea id="rawText" required rows="6"
+                              placeholder="直接将微信聊天记录或零碎想法粘贴至此。例如：5月24号去巴黎，想看巴黎圣母院内部入内讲解，下午去看埃菲尔铁塔。推荐周边步行可达、Google Map好评最高的法餐厅..."
+                              class="w-full bg-[#0d1117] border github-border rounded-lg p-3 text-sm text-[#c9d1d9] github-input transition-all leading-relaxed code-font resize-none"></textarea>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="w-full sm:w-auto px-5 py-2 bg-[#238636] hover:bg-[#2ea44f] text-white font-semibold text-xs rounded-lg border border-[#238636] hover:border-[#2ea44f] transition-all cursor-pointer shadow-sm">
+                        Run Build Script
+                    </button>
+                </div>
+            </form>
+
+            <div id="resultBoard" class="mt-8 border github-border rounded-xl hidden bg-[#0d1117]">
+                <div class="bg-[#161b22] border-b github-border px-4 py-2 flex items-center justify-between rounded-t-xl">
+                    <span class="text-xs font-mono text-[#8b949e]">Console / stdout</span>
+                    <span class="text-[10px] bg-[#238636]/10 text-[#238636] border border-[#238636]/20 px-2 py-0.5 rounded-full font-bold">Success</span>
+                </div>
+                <div class="p-4 space-y-4">
+                    <div class="p-3 bg-[#161b22] border github-border rounded-lg relative group">
+                        <span class="text-[10px] text-[#8b949e] uppercase font-mono block">CLIENT SHARE URL:</span>
+                        <p id="shareUrl" class="text-xs font-mono text-[#58a6ff] break-all font-semibold mt-1.5 pr-16 select-all"></p>
+                        <button onclick="copyUrl()" class="absolute right-3 top-3 text-[11px] bg-[#21262d] hover:bg-[#30363d] border github-border text-[#c9d1d9] px-2.5 py-1 rounded-md cursor-pointer transition-colors">Copy</button>
+                    </div>
+                    <div class="flex">
+                        <a id="previewBtn" target="_blank" class="text-center px-4 py-1.5 bg-[#21262d] hover:bg-[#30363d] border github-border text-[#c9d1d9] text-xs font-medium rounded-md transition-colors shadow-sm cursor-pointer">
+                            View Rendered HTML
+                        </a>
+                    </div>
                 </div>
             </div>
 
-            <div class="space-y-1.5">
-                <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">客户托管安保级别</label>
-                <select id="securityMode" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors">
-                    <option value="standard">STANDARD (标准白标分流模式)</option>
-                    <option value="concierge">CONCIERGE (高净值黑金隐私拦截模式)</option>
-                </select>
-            </div>
-
-            <div class="space-y-1.5">
-                <label class="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">散客原始行程意向 (微信记录/草稿)</label>
-                <textarea id="rawText" required rows="5" placeholder="例如: 5月24号去巴黎，想看巴黎圣母院内部入内讲解，下午去看埃菲尔铁塔。顺便推荐附近Google Map好评最高的餐厅..."
-                          class="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500 transition-colors leading-relaxed resize-none"></textarea>
-            </div>
-
-            <button type="submit" class="w-full glow-btn bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs tracking-widest py-3 rounded-xl transition-all duration-300 transform active:scale-[0.98] cursor-pointer">
-                ⚡ 自动化编译并落盘生成专属行程
-            </button>
-        </form>
-
-        <div id="resultBoard" class="mt-6 bg-neutral-900 border border-emerald-500/30 rounded-2xl p-5 space-y-4 hidden">
-            <div class="flex items-center space-x-2 text-emerald-400">
-                <span class="text-xs font-bold">🎉 行程编译成功！数据已永固落盘</span>
-            </div>
-            <div class="p-3 bg-neutral-950 rounded-xl border border-neutral-800 relative group">
-                <p class="text-[9px] text-neutral-500 uppercase tracking-wider">散客专属动态渲染分销链接</p>
-                <p id="shareUrl" class="text-xs font-mono text-emerald-400 break-all font-bold mt-1 pr-12 select-all"></p>
-                <button onclick="copyUrl()" class="absolute right-3 top-4 text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded cursor-pointer">复制</button>
-            </div>
-            <div class="flex gap-3">
-                <a id="previewBtn" target="_blank" class="flex-1 text-center py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium rounded-xl transition-colors">
-                    👀 司导真机预览
-                </a>
-            </div>
         </div>
     </main>
 
-    <footer class="text-center text-[10px] text-neutral-600 tracking-wider">
-        Powered by DeepSeek Engine & Supabase Storage Pooler. All rights reserved.
+    <footer class="border-t github-border bg-[#161b22]/30 px-4 py-6 text-center text-xs text-[#8b949e] space-y-1">
+        <p class="code-font text-[11px]">Commit hash: d381505 · Environment: production</p>
+        <p>© 2026 EuroTourHub, Inc. Built for distributed tour guides.</p>
     </footer>
 
     <script>
@@ -545,7 +556,8 @@ async def guide_entrance_page(request: Request):
             e.preventDefault();
             const btn = e.target.querySelector('button[type="submit"]');
             btn.disabled = true;
-            btn.innerText = "⏳ 正在调集 DEEPSEEK 编译并铺设 GOOGLE MAP 高分餐厅...";
+            btn.className = "w-full sm:w-auto px-5 py-2 bg-[#30363d] text-[#8b949e] border github-border text-xs rounded-lg cursor-not-allowed font-mono animate-pulse";
+            btn.innerText = "Executing deepseek-compiler...";
 
             const payload = {
                 user_id: document.getElementById('userId').value.trim(),
@@ -561,7 +573,7 @@ async def guide_entrance_page(request: Request):
                     body: JSON.stringify(payload)
                 });
 
-                if (!response.ok) throw new Error('网关响应异常');
+                if (!response.ok) throw new Error('Build error: Gateway responded with status ' + response.status);
                 const data = await response.json();
 
                 if (data.share_url) {
@@ -571,17 +583,17 @@ async def guide_entrance_page(request: Request):
                     document.getElementById('resultBoard').scrollIntoView({ behavior: 'smooth' });
                 }
             } catch (err) {
-                alert('开单失败，请检查网络或后端环境: ' + err.message);
+                alert('Error: ' + err.message);
             } finally {
-                btn.disabled = false;
-                btn.innerText = "⚡ 自动化编译并落盘生成专属行程";
+                btn.className = "w-full sm:w-auto px-5 py-2 bg-[#238636] hover:bg-[#2ea44f] text-white font-semibold text-xs rounded-lg border border-[#238636] hover:border-[#2ea44f] transition-all cursor-pointer shadow-sm";
+                btn.innerText = "Run Build Script";
             }
         });
 
         function copyUrl() {
             const url = document.getElementById('shareUrl').innerText;
             navigator.clipboard.writeText(url);
-            alert('链接已成功复制到剪贴板，可直接发给散客！');
+            alert('Copied to clipboard!');
         }
     </script>
 </body>
