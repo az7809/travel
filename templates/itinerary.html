@@ -308,6 +308,9 @@
               {% elif info.get('large_vehicle_ok') is sameas false %}
               <span class="text-xs text-red-500 block">🚫 V-Class不可入</span>
               {% endif %}
+              {% if info.get('ztl_restricted') %}
+              <span class="text-xs text-red-500 block font-bold">🚫 ZTL禁行区</span>
+              {% endif %}
               {% if info.get('hourly_rate_eur') %}
               <span class="text-xs text-warm/50 block">€{{ info.hourly_rate_eur }}/h</span>
               {% endif %}

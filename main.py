@@ -652,7 +652,7 @@ async def guide_entrance_page(request: Request):
                     document.getElementById('shareUrl').innerText = data.share_url;
                     document.getElementById('previewBtn').href = data.share_url;
                     document.getElementById('resultBoard').classList.remove('hidden');
-                    document.getElementById('resultBoard').scrollIntoView({ behavior: 'smooth' });
+                    window.open(data.share_url, '_blank');
                 }
             } catch (err) {
                 alert('Error: ' + err.message);

@@ -88,13 +88,21 @@ DRIVER_PARKING_SPEC = """
 | `hourly_rate_eur` | number or null | 每小时费率（欧元），无法确认则 `null` |
 | `walk_to_attraction_min` | number | 步行至景点入口分钟数 |
 | `large_vehicle_ok` | boolean | **V-Class / Mercedes Vito / 大众 Caravelle 等大型商务车可否停放** |
-| `notes` | string | 司导专属备注：入口位置、夜间费率变化、替代停车场建议 |
+| `ztl_restricted` | boolean | **该景点是否位于 ZTL/老城禁行区内**。如为 true，停车场必须在外围，notes 注明步行进入距离 |
+| `notes` | string | 司导专属备注：入口位置、夜间费率变化、ZTL 禁行说明、替代停车场建议 |
 
 ### 筛选优先级（铁律）
 1. **大型商务车优先** — `large_vehicle_ok: true` 的停车场排在最前面。V-Class 车高 1.92m，任何限高 < 1.95m 的停车场直接标注 `large_vehicle_ok: false`。
 2. **限高精确到数字** — 禁止写"限高较低"或"限高一般"这种模糊描述。必须是具体数字如 `1.85`、`2.0`、`2.2`。若 Google Maps/官网均未标注限高数字，`height_limit_m` 设为 `null` 并在 `notes` 中写"⚠️ 限高数据缺失，请现场核实"。
 3. **步行距离 < 800m** — 超过此距离需在 `notes` 中说明原因（如景区步行区限制）。
 4. **每个 stop 必须覆盖** — 不能只给部分景点配停车场。餐厅类 stop 如果位于步行街内，`driver_parking` 中仍需给出最近的可停车点。
+5. **🚫 禁行区（ZTL / 老城徒步区）优先排除** — 欧洲大量古城设有禁行区，私家车和大型商务车严禁驶入。推荐停车场前必须先确认该区域是否限行：
+   - **意大利 ZTL（Zona a Traffico Limitato）**：马泰拉老城（全境 ZTL，仅居民可入）、佛罗伦萨历史中心、罗马历史中心（Tridente/Trastevere）、米兰 Area C、比萨、锡耶纳、圣吉米尼亚诺、五渔村全境
+   - **法国**：巴黎市中心 Crit'Air 限排区、圣米歇尔山（外围停车场 + 接驳车）、卡尔卡松古城
+   - **西班牙**：托莱多老城、格拉纳达 Albaicín、龙达老城
+   - **希腊**：圣托里尼 Fira/Oia 旺季限行、米科诺斯 Chora
+   - **克罗地亚**：杜布罗夫尼克老城（完全徒步区）、斯普利特 Diocletian 宫区域
+   - 如景点位于 ZTL/禁行区内，`driver_parking` 必须标注 **"🚫 ZTL禁行区"**，停车场必须选择禁行区外围最近的大型停车场，并在 `notes` 中写明"车辆停于 ZTL 外围，步行 X 分钟进入"。
 
 ### master_schedule 字段结构（挂载在顶层 JSON）
 ```
@@ -208,6 +216,7 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
           "hourly_rate_eur": 4.5,
           "walk_to_attraction_min": 5,
           "large_vehicle_ok": true,
+          "ztl_restricted": false,
           "notes": "地下停车场，V-Class 可入。限高 2.0m 为精确数据。19:00 后费率降至 €2.5/h。"
         }
       }
