@@ -231,7 +231,7 @@ def _build_search_query(target_name: str) -> str:
 #   unsplash.com/*, pixabay.com/*, wikipedia.org/*
 # 这样 API 结果会天然偏向高质量无版权图源。
 def _fetch_google_image_sync(target_name: str) -> str | None:
-    """调用 Google Custom Search API 搜索实景图片。
+    """调用 Google Custom Search API 搜索实景图片（纯 fetcher，无缓存副作用）。
 
     查询策略：
     1. 中文名自动追加英文术语 + "landmark" → 精准匹配
@@ -240,16 +240,11 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
     4. fallback 到 items[0].link
     5. 后缀白名单校验（jpg/jpeg/png/webp），不合法则降级
 
-    失败时返回 None，调用方降级到 Picsum。
+    缓存由调用方 _prefetch_stop_images 统一管理。
     """
     global _DEGRADATION_COUNT
     if not _GOOGLE_IMAGE_ENABLED or not target_name:
         return None
-
-    cache_key = target_name.strip().lower()
-    cached = _IMAGE_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
 
     query = _build_search_query(target_name)
 
@@ -262,7 +257,7 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
                 "q": query,
                 "searchType": "image",
                 "num": 1,
-                "imgType": "photo",       # 强制实景照片（排除 clipart/face/animated）
+                "imgType": "photo",
                 "imgSize": "xlarge",
                 "safe": "active",
             },
@@ -271,19 +266,17 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
         if r.status_code == 403:
             logger.warning(
                 "[IMG_DEGRADE] Google API quota exhausted (HTTP 403) — "
-                "falling back to Picsum | total degradations: %d",
+                "total degradations: %d",
                 _DEGRADATION_COUNT + 1,
             )
             _DEGRADATION_COUNT += 1
-            _IMAGE_CACHE[cache_key] = None
             return None
         r.raise_for_status()
         data = r.json()
         items = data.get("items")
         if not items:
-            logger.info("[IMG_DEGRADE] Google API returned 0 results for %q → Picsum", target_name)
+            logger.info("[IMG_DEGRADE] Google API returned 0 results for %q", target_name)
             _DEGRADATION_COUNT += 1
-            _IMAGE_CACHE[cache_key] = None
             return None
 
         # ── 优先提取 pagemap.cse_image（Google 标注的高清预览图）──
@@ -312,66 +305,86 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
             if not any(path_part.endswith(ext) for ext in _VALID_IMAGE_SUFFIXES):
                 logger.info(
                     "[IMG_DEGRADE] Google returned non-image URL for %q "
-                    "(suffix not in %s): %s → Picsum",
+                    "(suffix not in %s): %s",
                     target_name, set(_VALID_IMAGE_SUFFIXES),
                     url[:120],
                 )
                 _DEGRADATION_COUNT += 1
-                _IMAGE_CACHE[cache_key] = None
                 return None
 
         if not url:
-            logger.info("[IMG_DEGRADE] Google returned empty URL for %q → Picsum", target_name)
+            logger.info("[IMG_DEGRADE] Google returned empty URL for %q", target_name)
             _DEGRADATION_COUNT += 1
-            _IMAGE_CACHE[cache_key] = None
             return None
 
-        _IMAGE_CACHE[cache_key] = url
         logger.info("[IMG_OK] Google image resolved for %q (%d chars)", target_name, len(url))
         return url
     except requests.Timeout:
-        logger.info("[IMG_DEGRADE] Google API timeout (6s) for %q → Picsum", target_name)
+        logger.info("[IMG_DEGRADE] Google API timeout (6s) for %q", target_name)
         _DEGRADATION_COUNT += 1
     except Exception as exc:
         logger.info(
-            "[IMG_DEGRADE] Google API unreachable for %q (%s: %s) → Picsum | degradations: %d",
+            "[IMG_DEGRADE] Google API unreachable for %q (%s: %s) | degradations: %d",
             target_name, type(exc).__name__, exc,
             _DEGRADATION_COUNT + 1,
         )
         _DEGRADATION_COUNT += 1
 
-    _IMAGE_CACHE[cache_key] = None
     return None
 
 
 async def _prefetch_stop_images(itinerary: list[dict]) -> None:
-    """批量预加载所有 stop 的 Google 实景图片。
+    """批量预加载 stop 图片：Wikipedia → Google → Picsum 三级降级。
 
-    每 stop 上限 4s（asyncio.wait_for），超时自动降级 Picsum。
-    所有 stop 通过 asyncio.gather 并发执行，总耗时 = max(单 stop 耗时)。
-    单个 stop 的任何异常均被隔离，不会中断整体流水线。
+    每 stop 上限 5s，通过 asyncio.wait_for 防抖。
+    所有 stop 并发执行，单点异常隔离，不中断流水线。
     """
-    _GOOGLE_PER_STOP_TIMEOUT = 4.0
+    PER_STOP_TIMEOUT = 5.0
 
     async def _fetch_one(stop: dict) -> None:
         name = stop.get("name", "")
         if not name or "image_url" in stop:
             return
+
+        # 检查缓存（命中则直接使用，包括 negative 缓存让后续调用跳过）
+        cache_key = name.strip().lower()
+        cached = _IMAGE_CACHE.get(cache_key)
+        if cached is not None:
+            stop["image_url"] = cached
+            return
+
+        url = None
         try:
+            # Tier 1: Wikipedia（免费、高相关性、稳定）
             url = await asyncio.wait_for(
-                asyncio.to_thread(_fetch_google_image_sync, name),
-                timeout=_GOOGLE_PER_STOP_TIMEOUT,
+                asyncio.to_thread(_fetch_wikipedia_image, name),
+                timeout=PER_STOP_TIMEOUT,
             )
         except asyncio.TimeoutError:
-            global _DEGRADATION_COUNT
-            logger.info("[IMG_DEGRADE] Pre-fetch timeout (%.0fs) for %q — falling back to Picsum",
-                        _GOOGLE_PER_STOP_TIMEOUT, name)
-            _DEGRADATION_COUNT += 1
-            url = None
+            pass
         except Exception:
-            url = None
+            pass
+
+        if not url and _GOOGLE_IMAGE_ENABLED:
+            try:
+                # Tier 2: Google Custom Search
+                url = await asyncio.wait_for(
+                    asyncio.to_thread(_fetch_google_image_sync, name),
+                    timeout=PER_STOP_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                global _DEGRADATION_COUNT
+                logger.info("[IMG_DEGRADE] Timeout (%.0fs) for %q → Picsum", PER_STOP_TIMEOUT, name)
+                _DEGRADATION_COUNT += 1
+            except Exception:
+                pass
+
         if url:
+            _IMAGE_CACHE[cache_key] = url
             stop["image_url"] = url
+        else:
+            # 所有 tier 均失败，写入 negative 缓存避免重复尝试
+            _IMAGE_CACHE[cache_key] = None
 
     tasks = [_fetch_one(s) for day in itinerary for s in day.get("stops", [])]
     if not tasks:
@@ -390,7 +403,7 @@ async def _prefetch_stop_images(itinerary: list[dict]) -> None:
 def get_image_for_target(target_name: str) -> str:
     """Picsum 兜底图源（800×600 稳定随机图）。
 
-    仅当 Google API 未配置或预取失败时由模板端降级调用。
+    Wikipedia / Google 均失败时模板端降级调用。
     """
     seed = abs(hash(target_name)) % 1000
     return f"https://picsum.photos/seed/{seed}/800/600?{quote(target_name)}"
@@ -484,35 +497,40 @@ WIKI_HEADERS = {
 }
 
 
-def _fetch_images_for_attraction(name: str) -> list[str]:
-    """抓取单个景点的 Wikipedia 高清图片 URL（最多 1 张）。
+def _fetch_wikipedia_image(title_or_name: str) -> str | None:
+    """从 Wikipedia 获取景点主图（免费、无 Key、高相关性）。
 
-    使用 Wikipedia 的 pageimages API，返回 800px 宽的缩略图。
-    Google Custom Search 可作为未来升级路径（需 GOOGLE_API_KEY + GOOGLE_CSE_ID）。
+    使用 _build_search_query() 构造英文查询 → Wikipedia search API 定位词条
+    → pageimages API 提取 800px 主图。失败返回 None。
+
+    注意：此函数只写成功缓存，不写 negative cache（失败时不应阻断
+    _prefetch_stop_images 的下一级 Google 降级）。
     """
-    if not name:
-        return []
+    if not title_or_name:
+        return None
+
     try:
-        # Step 1: OpenSearch 找到最匹配的 Wikipedia 词条
+        # Step 1: 用英文 query 搜索最匹配的 Wikipedia 词条
+        query = _build_search_query(title_or_name)
         search_params = {
-            "action": "opensearch",
-            "search": name,
-            "limit": 1,
-            "namespace": 0,
+            "action": "query",
+            "list": "search",
+            "srsearch": query,
+            "srlimit": 1,
             "format": "json",
         }
         r = requests.get(WIKI_API, params=search_params, headers=WIKI_HEADERS, timeout=8)
         r.raise_for_status()
-        data = r.json()
-        titles = data[1] if len(data) > 1 else []
-        if not titles:
-            return []
-        title = titles[0]
+        results = r.json().get("query", {}).get("search", [])
+        if not results:
+            return None
 
-        # Step 2: 获取词条主图（pageimages prop）
+        page_id = results[0]["pageid"]
+
+        # Step 2: 获取词条主图
         img_params = {
             "action": "query",
-            "titles": title,
+            "pageids": str(page_id),
             "prop": "pageimages",
             "pithumbsize": 800,
             "format": "json",
@@ -520,13 +538,29 @@ def _fetch_images_for_attraction(name: str) -> list[str]:
         r2 = requests.get(WIKI_API, params=img_params, headers=WIKI_HEADERS, timeout=8)
         r2.raise_for_status()
         pages = r2.json().get("query", {}).get("pages", {})
-        for page in pages.values():
-            thumb = page.get("thumbnail", {}).get("source")
-            if thumb:
-                return [thumb]
-        return []
+        page = pages.get(str(page_id), {})
+        thumb = page.get("thumbnail", {}).get("source")
+
+        if not thumb:
+            return None
+
+        # 后缀白名单校验
+        url_lower = thumb.lower().split("?")[0]
+        if not any(url_lower.endswith(ext) for ext in _VALID_IMAGE_SUFFIXES):
+            return None
+
+        cache_key = title_or_name.strip().lower()
+        _IMAGE_CACHE[cache_key] = thumb
+        logger.info("[IMG_OK] Wikipedia resolved %q → %s", title_or_name, thumb[:100])
+        return thumb
     except Exception:
-        return []
+        return None
+
+
+def _fetch_images_for_attraction(name: str) -> list[str]:
+    """Legacy wrapper — 供 _fetch_day_images() 使用。"""
+    url = _fetch_wikipedia_image(name)
+    return [url] if url else []
 
 
 async def _fetch_day_images(days: list[dict]) -> dict[int, list[dict]]:
