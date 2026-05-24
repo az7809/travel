@@ -83,6 +83,28 @@ database = Database(
 )
 logger.info("Database pool configured (min=2 max=20 timeout=30s)")
 
+
+async def ensure_db_connected():
+    """Auto-reconnect sentinel — guards against Supavisor cold-start / idle timeout.
+
+    When the database pool is idle for extended periods, Supavisor session pooler
+    may silently close connections.  This sentinel checks ``database.is_connected``
+    before every DB-bound request and reconnects if needed, preventing spurious
+    500s from ConnectionRefusedError / ConnectionClosedError.
+    """
+    if not database.is_connected:
+        logger.warning("[DB_RECOVERY] Database is not running! Attempting emergency auto-reconnect...")
+        try:
+            await asyncio.wait_for(database.connect(), timeout=10.0)
+            logger.info("[DB_RECOVERY] Emergency database connection established successfully!")
+        except Exception as exc:
+            logger.error("[DB_RECOVERY] Auto-reconnect failed: %s", exc)
+            raise HTTPException(
+                status_code=503,
+                detail="Database Service Temporarily Unavailable.",
+            )
+
+
 # ===========================================================================
 # Async OpenAI client（全请求复用连接池）
 # ===========================================================================
@@ -264,6 +286,8 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
     logger.info("Generate request received: user_id=%s mode=%s text_len=%d",
                 req.user_id, req.security_mode, len(req.raw_text))
 
+    await ensure_db_connected()
+
     system_prompt = get_system_prompt(req.security_mode)
 
     # --- DeepSeek API 调用 ---
@@ -352,8 +376,9 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
     query = """
     INSERT INTO itineraries (id, user_id, security_mode, booking_aid, structured_json)
     VALUES (:id, :user_id, :security_mode, :booking_aid, :structured_json)
+    RETURNING id
     """
-    await database.execute(
+    returned_id = await database.fetch_val(
         query=query,
         values={
             "id": itinerary_id,
@@ -363,6 +388,9 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
             "structured_json": json.dumps(structured_final, ensure_ascii=False),
         },
     )
+    if returned_id != itinerary_id:
+        logger.error("INSERT RETURNING mismatch: expected=%s got=%s", itinerary_id, returned_id)
+        raise HTTPException(status_code=500, detail="Database write verification failed.")
 
     logger.info("Itinerary stored: id=%s user_id=%s days=%d cities=%s",
                 itinerary_id, req.user_id,
@@ -405,6 +433,8 @@ ERROR_HTML = """<!DOCTYPE html>
 )
 async def share_itinerary(request: Request, itinerary_id: str):
     logger.info("Share request received: id=%s", itinerary_id)
+
+    await ensure_db_connected()
 
     query = "SELECT * FROM itineraries WHERE id = :id"
     record = await database.fetch_one(query=query, values={"id": itinerary_id})
@@ -594,6 +624,7 @@ async def guide_entrance_page(request: Request):
 @app.get("/health")
 async def health():
     try:
+        await ensure_db_connected()
         count = await database.fetch_val("SELECT COUNT(*) FROM itineraries")
     except Exception:
         count = -1
