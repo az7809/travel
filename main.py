@@ -389,6 +389,618 @@ def calculate_quote(days: list[dict]) -> dict:
 
 
 # ===========================================================================
+# 静态停车场数据库 — 核心景点免 Token 注入
+# ===========================================================================
+# DeepSeek 只需输出 `{"_static": true}` 占位符，后端自动注入完整停车场数据。
+# 节省每条行程约 2,000-4,000 tokens 的停车场描述开销。
+STATIC_DATA_LIBRARY: dict[str, dict] = {
+    # ── 巴黎 ─────────────────────────────────────────────
+    "巴黎圣母院": {
+        "name": "Parking Maubert Collège des Bernardins",
+        "address": "17 Rue des Bernardins, 75005 Paris",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 3.5,
+        "walk_to_attraction_min": 8,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。首选停车场（Indigo Notre-Dame 限高仅1.9m，V-Class无法进入）。步行沿塞纳河畔直达圣母院。",
+    },
+    "卢浮宫": {
+        "name": "Parking Indigo Louvre Samaritaine",
+        "address": "1 Place du Louvre, 75001 Paris",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.5,
+        "walk_to_attraction_min": 5,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "地下停车场，V-Class 可入。入口在 Rue de l'Amiral de Coligny。19:00 后费率降至 €2.5/h。周二卢浮宫闭馆日停车场照常开放。",
+    },
+    "埃菲尔铁塔": {
+        "name": "Parking Pullman Tour Eiffel",
+        "address": "18 Avenue de Suffren, 75015 Paris",
+        "height_limit_m": 1.9,
+        "hourly_rate_eur": 5.0,
+        "walk_to_attraction_min": 5,
+        "large_vehicle_ok": False,
+        "ztl_restricted": False,
+        "notes": "⚠️ 限高1.9m，V-Class(1.92m)无法进入！替代方案：Parking Javel — 限高2.2m，步行至铁塔约15分钟，或让客户在铁塔入口下车后司导去停车。",
+    },
+    "凯旋门": {
+        "name": "Parking Indigo Paris Kléber Trocadéro",
+        "address": "65 Avenue Kléber, 75116 Paris",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.0,
+        "walk_to_attraction_min": 6,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。建议停地下二层，一层车位偏窄。步行沿 Av Kléber 直达凯旋门。",
+    },
+    "奥赛博物馆": {
+        "name": "Parking Indigo Paris Louvre Samaritaine",
+        "address": "1 Place du Louvre, 75001 Paris",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.5,
+        "walk_to_attraction_min": 8,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。跨塞纳河步行桥（Passerelle Léopold-Sédar-Senghor）直达奥赛。周一奥赛闭馆。",
+    },
+    "蒙马特": {
+        "name": "Parking Anvers — Sacré-Cœur",
+        "address": "7 Rue de Steinkerque, 75018 Paris",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 3.0,
+        "walk_to_attraction_min": 10,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。步行上坡至圣心大教堂约10分钟（台阶较多）。注意：蒙马特高地部分巷道极窄，V-Class 切勿驶入 Rue des Saules 以北。",
+    },
+    "圣心大教堂": {
+        "name": "Parking Anvers — Sacré-Cœur",
+        "address": "7 Rue de Steinkerque, 75018 Paris",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 3.0,
+        "walk_to_attraction_min": 10,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。注意蒙马特高地巷道狭窄，部分路段 V-Class 禁行。",
+    },
+    "先贤祠": {
+        "name": "Parking Maubert Collège des Bernardins",
+        "address": "17 Rue des Bernardins, 75005 Paris",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 3.5,
+        "walk_to_attraction_min": 7,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。步行经 Rue Monge 直达先贤祠，沿途可经过拉丁区。",
+    },
+    "荣军院": {
+        "name": "Parking Indigo Paris Invalides",
+        "address": "23 Rue de Constantine, 75007 Paris",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.0,
+        "walk_to_attraction_min": 3,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。最近停车场，入口醒目。",
+    },
+
+    # ── 凡尔赛 ───────────────────────────────────────────
+    "凡尔赛宫": {
+        "name": "Parking Versailles — Place d'Armes",
+        "address": "Place d'Armes, 78000 Versailles",
+        "height_limit_m": None,
+        "hourly_rate_eur": 2.0,
+        "walk_to_attraction_min": 3,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "露天停车场，V-Class 无忧。周一闭馆（⚠️ 行程安排在周一必须标注替代方案）。建议提前到达以避免旺季排队。",
+    },
+
+    # ── 罗马 ─────────────────────────────────────────────
+    "斗兽场": {
+        "name": "Parking Colosseo — Via dei Santi Quattro",
+        "address": "Via dei Santi Quattro, 00184 Roma",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 3.0,
+        "walk_to_attraction_min": 4,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。停车场位于斗兽场东南侧，ZTL 边界外。⛔ 注意：罗马历史中心 ZTL 管控严格，从此停车场步行至斗兽场入口仅4分钟。",
+    },
+    "梵蒂冈博物馆": {
+        "name": "Parking Vespasiano — Vaticano",
+        "address": "Via Vespasiano, 28, 00192 Roma",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 3.5,
+        "walk_to_attraction_min": 5,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。位于梵蒂冈城墙外北侧，避开 ZTL。⚠️ 梵蒂冈博物馆每月最后一个周日免费（人流量井喷，建议避开）。",
+    },
+    "圣彼得大教堂": {
+        "name": "Parking Vespasiano — Vaticano",
+        "address": "Via Vespasiano, 28, 00192 Roma",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 3.5,
+        "walk_to_attraction_min": 7,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。步行穿过圣彼得广场进入大教堂。进入大教堂需安检排队（约15-30分钟），建议早到。",
+    },
+    "许愿池": {
+        "name": "Parking Ludovisi — Via Ludovisi",
+        "address": "Via Ludovisi, 60, 00187 Roma",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.0,
+        "walk_to_attraction_min": 10,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。许愿池位于 Tridente ZTL 核心区内，私家车禁入。此停车场在 ZTL 外，步行约10分钟。⚠️ 车内勿留任何可见物品（罗马砸车窗高发）。",
+    },
+    "万神殿": {
+        "name": "Parking Ludovisi — Via Ludovisi",
+        "address": "Via Ludovisi, 60, 00187 Roma",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.0,
+        "walk_to_attraction_min": 12,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。万神殿位于罗马历史中心 ZTL 核心。步行沿 Via del Corso 直达，沿途可逛罗马精品街。",
+    },
+    "西班牙广场": {
+        "name": "Parking Ludovisi — Via Ludovisi",
+        "address": "Via Ludovisi, 60, 00187 Roma",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.0,
+        "walk_to_attraction_min": 5,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。西班牙广场位于 ZTL 内。此停车场最近且 V-Class 可入。步行沿 Via dei Condotti 名店街直达。",
+    },
+
+    # ── 佛罗伦萨 ─────────────────────────────────────────
+    "圣母百花大教堂": {
+        "name": "Parcheggio Sant'Ambrogio",
+        "address": "Piazza Sant'Ambrogio, 50121 Firenze",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 2.5,
+        "walk_to_attraction_min": 12,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "🚫 **佛罗伦萨历史中心全境 ZTL**，私家车和大型商务车严禁进入。此停车场位于 ZTL 外围东侧，V-Class 可入。步行经 Borgo la Croce 直达大教堂。⚠️ ZTL 摄像头自动拍照罚款（€80-120），切勿侥幸驶入。",
+    },
+    "乌菲兹美术馆": {
+        "name": "Parcheggio Sant'Ambrogio",
+        "address": "Piazza Sant'Ambrogio, 50121 Firenze",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 2.5,
+        "walk_to_attraction_min": 15,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "🚫 ZTL 外围停车场。步行经 Piazza della Signoria 直达乌菲兹。路程稍长但沿途全是文艺复兴街景。",
+    },
+    "大卫雕像": {
+        "name": "Parcheggio Sant'Ambrogio",
+        "address": "Piazza Sant'Ambrogio, 50121 Firenze",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 2.5,
+        "walk_to_attraction_min": 12,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。学院美术馆（Galleria dell'Accademia）藏有大卫真迹，ZTL 外围停车后步行前往。",
+    },
+    "老桥": {
+        "name": "Parcheggio Sant'Ambrogio",
+        "address": "Piazza Sant'Ambrogio, 50121 Firenze",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 2.5,
+        "walk_to_attraction_min": 18,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "🚫 ZTL 外围。步行较远（约18分钟），建议司导让客户在老桥附近下车后自行停车，电话约定集合点。",
+    },
+
+    # ── 威尼斯 ───────────────────────────────────────────
+    "圣马可广场": {
+        "name": "Garage San Marco — Piazzale Roma",
+        "address": "Piazzale Roma, 30135 Venezia",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 6.0,
+        "walk_to_attraction_min": 25,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "威尼斯主岛全境无机动车道路。**所有车辆必须停在 Piazzale Roma 或 Tronchetto**。V-Class 可入车库。之后乘水上巴士 Vaporetto（1号线约25分钟）直达圣马可广场。建议购买 24h 通票（€25/人）。",
+    },
+    "叹息桥": {
+        "name": "Garage San Marco — Piazzale Roma",
+        "address": "Piazzale Roma, 30135 Venezia",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 6.0,
+        "walk_to_attraction_min": 25,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "同圣马可广场路线。叹息桥在圣马可广场旁步行 2 分钟。",
+    },
+    "里亚托桥": {
+        "name": "Garage San Marco — Piazzale Roma",
+        "address": "Piazzale Roma, 30135 Venezia",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 6.0,
+        "walk_to_attraction_min": 20,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "乘 Vaporetto 1号线至 Rialto 站下（比圣马可少坐一站），V-Class 停 Piazzale Roma。",
+    },
+
+    # ── 米兰 ─────────────────────────────────────────────
+    "米兰大教堂": {
+        "name": "Parking Piazza Meda — Autosilo",
+        "address": "Piazza Filippo Meda, 20121 Milano",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 4.5,
+        "walk_to_attraction_min": 6,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "☢️ **米兰 Area C ZTL 工作日 7:30-19:30 全境限行**。此停车场位于 Area C 边界内，V-Class 需购买 Area C 通行票（€5/天，在烟草店 Tabacchi 或线上购买）。建议周六/周日前往可免 Area C 费。",
+    },
+    "最后的晚餐": {
+        "name": "Parking Piazza Meda — Autosilo",
+        "address": "Piazza Filippo Meda, 20121 Milano",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 4.5,
+        "walk_to_attraction_min": 15,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "☢️ Area C 通行票 ¥5需购买。《最后的晚餐》位于圣玛利亚感恩教堂（Santa Maria delle Grazie），门票极度稀缺，必须提前 2-3 个月预约。",
+    },
+
+    # ── 巴塞罗那 ─────────────────────────────────────────
+    "圣家堂": {
+        "name": "Parking Saba Bams — Sagrada Familia",
+        "address": "Carrer de Sardenya, 350, 08025 Barcelona",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 3.5,
+        "walk_to_attraction_min": 3,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。圣家堂正对面，距离最近。⚠️ 巴塞罗那扒窃率极高，车内切勿遗留任何可见物品，建议司导轮流看车。",
+    },
+    "桂尔公园": {
+        "name": "Parking BSM — Park Güell",
+        "address": "Carrer d'Olot, 08024 Barcelona",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 3.0,
+        "walk_to_attraction_min": 2,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。桂尔公园官方停车场，车位有限，旺季建议早到（9:00 前）。",
+    },
+    "巴特罗之家": {
+        "name": "Parking Saba Bams — Passeig de Gràcia",
+        "address": "Passeig de Gràcia, 62, 08007 Barcelona",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 3.8,
+        "walk_to_attraction_min": 4,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。同在 Passeig de Gràcia 上的米拉之家（La Pedrera）步行 5 分钟可达，无需移车。",
+    },
+    "哥特区": {
+        "name": "Parking BSM — Catedral",
+        "address": "Avinguda de la Catedral, 08002 Barcelona",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 3.2,
+        "walk_to_attraction_min": 2,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。位于巴塞罗那主教堂前广场地下。⚠️ 哥特区夜间部分巷道灯光昏暗，建议天黑前离场。",
+    },
+
+    # ── 阿姆斯特丹 ───────────────────────────────────────
+    "梵高博物馆": {
+        "name": "Q-Park Museumplein",
+        "address": "Van Baerlestraat 33B, 1071 AP Amsterdam",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 5.5,
+        "walk_to_attraction_min": 3,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。位于博物馆广场地下，步行至梵高博物馆、国立博物馆均5分钟内。阿姆斯特丹停车费极高（€5-7/h），属正常水平。",
+    },
+    "国立博物馆": {
+        "name": "Q-Park Museumplein",
+        "address": "Van Baerlestraat 33B, 1071 AP Amsterdam",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 5.5,
+        "walk_to_attraction_min": 3,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。与梵高博物馆共用停车场，两个博物馆可一网打尽无需移车。",
+    },
+    "安妮之家": {
+        "name": "Q-Park Bijenkorf",
+        "address": "Damrak 70B, 1012 LM Amsterdam",
+        "height_limit_m": 1.95,
+        "hourly_rate_eur": 6.0,
+        "walk_to_attraction_min": 10,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "⚠️ 限高1.95m刚好卡在 V-Class(1.92m) 边缘。建议司导现场确认高度后再入库。替代方案：Parking Oosterdok（限高2.1m），步行约15分钟。",
+    },
+
+    # ── 伦敦 ─────────────────────────────────────────────
+    "大英博物馆": {
+        "name": "NCP London Bloomsbury Square",
+        "address": "Bloomsbury Square, London WC1A 2RJ",
+        "height_limit_m": 1.98,
+        "hourly_rate_eur": 8.0,
+        "walk_to_attraction_min": 5,
+        "large_vehicle_ok": False,
+        "ztl_restricted": False,
+        "notes": "⚠️ 伦敦 Congestion Charge Zone（拥堵费 £15/天）+ ULEZ（超低排放区 £12.50/天，V-Class 柴油版可能不达标）。限高1.98m 不足以容纳 V-Class(1.92m 刚好但极窄）。替代方案：在伦敦郊区换乘地铁，或选用本地司机。",
+    },
+
+    # ── 比萨 ────────────────────────────────────────────
+    "比萨斜塔": {
+        "name": "Parcheggio Via Pietrasantina",
+        "address": "Via Pietrasantina, 56122 Pisa",
+        "height_limit_m": None,
+        "hourly_rate_eur": 2.0,
+        "walk_to_attraction_min": 12,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "露天停车场，V-Class 无忧。斜塔所在的奇迹广场（Piazza dei Miracoli）外围最大停车场。🚫 奇迹广场全境步行区，车辆不得驶入。",
+    },
+
+    # ── 五渔村 ──────────────────────────────────────────
+    "五渔村": {
+        "name": "Parcheggio Stazione La Spezia Centrale",
+        "address": "Piazza Medaglie d'Oro, 19122 La Spezia",
+        "height_limit_m": 2.1,
+        "hourly_rate_eur": 1.5,
+        "walk_to_attraction_min": 5,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "🚫 **五渔村五村全境 ZTL 禁行**，外部车辆严禁驶入任何一个村子。最佳方案：V-Class 停 La Spezia 火车站停车场，全团乘火车（Cinque Terre Express，€5/单程）进入各村。买 Cinque Terre Card（€18.20/天，含火车+徒步步道）。",
+    },
+
+    # ── 圣吉米尼亚诺 ────────────────────────────────────
+    "圣吉米尼亚诺": {
+        "name": "Parcheggio Giubileo — San Gimignano",
+        "address": "Via dei Fossi, 53037 San Gimignano",
+        "height_limit_m": None,
+        "hourly_rate_eur": 2.0,
+        "walk_to_attraction_min": 8,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "🚫 圣吉米尼亚诺古城墙内全境 ZTL。此停车场位于城墙外南侧，V-Class 可停。步行经 Porta San Giovanni 城门进入古城。",
+    },
+
+    # ── 锡耶纳 ──────────────────────────────────────────
+    "锡耶纳": {
+        "name": "Parcheggio Stadio — Siena",
+        "address": "Viale dei Mille, 53100 Siena",
+        "height_limit_m": None,
+        "hourly_rate_eur": 2.0,
+        "walk_to_attraction_min": 15,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "🚫 锡耶纳历史中心全境 ZTL。此停车场位于城北，V-Class 可停。有免费自动扶梯（Escalator）直达市中心田野广场（Piazza del Campo）。",
+    },
+
+    # ── 庞贝 ────────────────────────────────────────────
+    "庞贝古城": {
+        "name": "Parcheggio Pompeii — Via Plinio",
+        "address": "Via Plinio, 80045 Pompei",
+        "height_limit_m": None,
+        "hourly_rate_eur": 2.0,
+        "walk_to_attraction_min": 3,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "露天停车场，V-Class 无忧。紧邻庞贝遗址 Porta Marina 主入口。旺季（6-9月）建议携带遮阳伞和水——遗址内几乎没有遮荫。",
+    },
+
+    # ── 尼斯 ────────────────────────────────────────────
+    "蔚蓝海岸": {
+        "name": "Parking Promenade des Anglais — Palais de la Méditerranée",
+        "address": "15 Promenade des Anglais, 06000 Nice",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 3.5,
+        "walk_to_attraction_min": 1,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。位于英国人漫步大道（Promenade des Anglais），海景停车场。夏季（7-8月）车位极度紧张，建议 9:00 前到达。",
+    },
+
+    # ── 马泰拉 ──────────────────────────────────────────
+    "马泰拉": {
+        "name": "Parcheggio Via Saragat — Matera",
+        "address": "Via Giuseppe Saragat, 75100 Matera",
+        "height_limit_m": None,
+        "hourly_rate_eur": 2.0,
+        "walk_to_attraction_min": 15,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "🚫 **马泰拉 Sassi 老城全境 ZTL 禁行区**（仅限居民车辆）。此停车场位于 Sassi 区外围，V-Class 可停。步行下坡进入 Sassi 石窟城区。建议穿防滑鞋——石窟区石板路极滑。",
+    },
+
+    # ── 阿尔贝罗贝洛 ────────────────────────────────────
+    "阿尔贝罗贝洛": {
+        "name": "Parcheggio Via Giuseppe Verdi",
+        "address": "Via Giuseppe Verdi, 70011 Alberobello",
+        "height_limit_m": None,
+        "hourly_rate_eur": 1.5,
+        "walk_to_attraction_min": 5,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "露天停车场，V-Class 无忧。步行 5 分钟进入 Trulli 蘑菇屋区。⚠️ Trulli 区内巷道极窄，V-Class 绝对无法进入。",
+    },
+
+    # ── 卢塞恩 ──────────────────────────────────────────
+    "卢塞恩": {
+        "name": "Parkhaus Altstadt — Luzern",
+        "address": "Kasernenplatz, 6003 Luzern",
+        "height_limit_m": 2.0,
+        "hourly_rate_eur": 4.0,
+        "walk_to_attraction_min": 8,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。位于卢塞恩老城入口。瑞士停车费偏高（CHF 3-5/h），此为正常水平。步行经卡佩尔廊桥（Chapel Bridge）进入老城。🇨🇭 瑞士高速需购买 Vignette（CHF 40/年）。",
+    },
+
+    # ── 因特拉肯 / 少女峰 ───────────────────────────────
+    "少女峰": {
+        "name": "Parking Grindelwald Terminal",
+        "address": "Grundstrasse, 3818 Grindelwald",
+        "height_limit_m": 2.2,
+        "hourly_rate_eur": 3.0,
+        "walk_to_attraction_min": 2,
+        "large_vehicle_ok": True,
+        "ztl_restricted": False,
+        "notes": "V-Class 可入。车辆停在 Grindelwald Terminal，全团乘 Eiger Express 缆车（15分钟）至 Eigergletscher，换乘少女峰铁路（Jungfraubahn）登顶。无法开车上山。少女峰往返票 CHF 220+/人，建议提前在线购票。",
+    },
+}
+
+# 反向别名索引：支持 DeepSeek 输出的各种中文名变体
+_PARKING_ALIASES: dict[str, str] = {
+    "巴黎圣母院内部入内导览": "巴黎圣母院",
+    "巴黎圣母院内部": "巴黎圣母院",
+    "Notre-Dame": "巴黎圣母院",
+    "卢浮宫博物馆": "卢浮宫",
+    "Louvre": "卢浮宫",
+    "艾菲尔铁塔": "埃菲尔铁塔",
+    "Tour Eiffel": "埃菲尔铁塔",
+    "罗马斗兽场": "斗兽场",
+    "Colosseum": "斗兽场",
+    "Colosseo": "斗兽场",
+    "Vatican Museums": "梵蒂冈博物馆",
+    "Musei Vaticani": "梵蒂冈博物馆",
+    "Trevi Fountain": "许愿池",
+    "Fontana di Trevi": "许愿池",
+    "Pantheon": "万神殿",
+    "Spanish Steps": "西班牙广场",
+    "Piazza di Spagna": "西班牙广场",
+    "圣母百花圣殿": "圣母百花大教堂",
+    "Duomo di Firenze": "圣母百花大教堂",
+    "Duomo": "圣母百花大教堂",
+    "Uffizi": "乌菲兹美术馆",
+    "Galleria degli Uffizi": "乌菲兹美术馆",
+    "大卫像": "大卫雕像",
+    "学院美术馆": "大卫雕像",
+    "Galleria dell'Accademia": "大卫雕像",
+    "维琪奥桥": "老桥",
+    "Ponte Vecchio": "老桥",
+    "Piazza San Marco": "圣马可广场",
+    "Bridge of Sighs": "叹息桥",
+    "Ponte dei Sospiri": "叹息桥",
+    "Rialto": "里亚托桥",
+    "Ponte di Rialto": "里亚托桥",
+    "Duomo di Milano": "米兰大教堂",
+    "Milan Cathedral": "米兰大教堂",
+    "Cenacolo Vinciano": "最后的晚餐",
+    "The Last Supper": "最后的晚餐",
+    "Sagrada Familia": "圣家堂",
+    "Park Güell": "桂尔公园",
+    "Casa Batlló": "巴特罗之家",
+    "Gothic Quarter": "哥特区",
+    "Barri Gòtic": "哥特区",
+    "Van Gogh Museum": "梵高博物馆",
+    "Rijksmuseum": "国立博物馆",
+    "Anne Frank House": "安妮之家",
+    "British Museum": "大英博物馆",
+    "Torre di Pisa": "比萨斜塔",
+    "Leaning Tower": "比萨斜塔",
+    "Cinque Terre": "五渔村",
+    "San Gimignano": "圣吉米尼亚诺",
+    "Siena": "锡耶纳",
+    "Pompeii": "庞贝古城",
+    "庞贝": "庞贝古城",
+    "Nice": "蔚蓝海岸",
+    "Promenade des Anglais": "蔚蓝海岸",
+    "Matera": "马泰拉",
+    "Sassi di Matera": "马泰拉",
+    "Alberobello": "阿尔贝罗贝洛",
+    "Trulli": "阿尔贝罗贝洛",
+    "Luzern": "卢塞恩",
+    "Lucerne": "卢塞恩",
+    "Jungfrau": "少女峰",
+    "Jungfraujoch": "少女峰",
+}
+
+
+def _resolve_parking_key(stop_name: str) -> str | None:
+    """Resolve a stop name to its canonical STATIC_DATA_LIBRARY key.
+
+    匹配顺序：
+    1. 精确匹配库 key
+    2. 别名匹配
+    3. 子串包含匹配（库 key 出现在 stop_name 中）
+    """
+    if not stop_name:
+        return None
+    # 1. 精确匹配
+    if stop_name in STATIC_DATA_LIBRARY:
+        return stop_name
+    # 2. 别名匹配
+    if stop_name in _PARKING_ALIASES:
+        return _PARKING_ALIASES[stop_name]
+    # 3. 子串包含（库 key ⊂ stop_name）
+    for key in STATIC_DATA_LIBRARY:
+        if key in stop_name:
+            return key
+    return None
+
+
+def _enrich_parking_from_library(itinerary: list[dict]) -> None:
+    """从静态数据库注入停车场数据，免去 DeepSeek 生成开销。
+
+    对每个 stop，若匹配到 STATIC_DATA_LIBRARY，则将其完整停车场数据
+    注入 driver_parking 字典（覆盖 `_static` 占位符）。不匹配的 stop 保留
+    DeepSeek 原始输出不变。遍历结束后清理所有未被替换的 `_static` 残留。
+    """
+    for day in itinerary:
+        stops = day.get("stops", [])
+        if not stops:
+            continue
+
+        raw_parking = day.get("driver_parking")
+        if not isinstance(raw_parking, dict):
+            raw_parking = {}
+            day["driver_parking"] = raw_parking
+
+        # Pass 1: inject library data, tracking old keys to remove
+        stale_keys: set[str] = set()
+        added_keys: set[str] = set()
+        for stop in stops:
+            stop_name = stop.get("name", "")
+            lib_key = _resolve_parking_key(stop_name)
+            if lib_key is None:
+                continue
+            # Find any existing driver_parking key that matches this stop
+            for pk in list(raw_parking.keys()):
+                if pk == lib_key:
+                    break
+                if isinstance(raw_parking[pk], dict) and raw_parking[pk].get("_static") is True:
+                    stale_keys.add(pk)
+                    break
+            raw_parking[lib_key] = STATIC_DATA_LIBRARY[lib_key]
+            added_keys.add(lib_key)
+
+        # Pass 2: remove stale keys (old key names replaced by canonical lib key)
+        for sk in stale_keys:
+            if sk not in added_keys:
+                raw_parking.pop(sk, None)
+
+        # Pass 3: remove any residual _static entries that weren't matched
+        for pk in list(raw_parking.keys()):
+            v = raw_parking[pk]
+            if isinstance(v, dict) and v.get("_static") is True:
+                del raw_parking[pk]
+
+
+# ===========================================================================
 # Lifespan — PostgreSQL 异步连接池生命周期（Render 冷启动容错）
 # ===========================================================================
 @asynccontextmanager
@@ -585,6 +1197,9 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
         data["master_schedule"] = [
             s for s in data["master_schedule"] if isinstance(s, dict)
         ]
+
+    # --- 静态数据库注入：免 Token 停车场数据 ---
+    _enrich_parking_from_library(itinerary)
 
     # --- 将导游信息嵌入 JSON，统一落盘 ---
     structured_final = json.loads(content)
