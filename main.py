@@ -349,6 +349,7 @@ async def _prefetch_stop_images(itinerary: list[dict]) -> None:
 
     每 stop 上限 4s（asyncio.wait_for），超时自动降级 Picsum。
     所有 stop 通过 asyncio.gather 并发执行，总耗时 = max(单 stop 耗时)。
+    单个 stop 的任何异常均被隔离，不会中断整体流水线。
     """
     _GOOGLE_PER_STOP_TIMEOUT = 4.0
 
@@ -362,9 +363,12 @@ async def _prefetch_stop_images(itinerary: list[dict]) -> None:
                 timeout=_GOOGLE_PER_STOP_TIMEOUT,
             )
         except asyncio.TimeoutError:
+            global _DEGRADATION_COUNT
             logger.info("[IMG_DEGRADE] Pre-fetch timeout (%.0fs) for %q — falling back to Picsum",
                         _GOOGLE_PER_STOP_TIMEOUT, name)
             _DEGRADATION_COUNT += 1
+            url = None
+        except Exception:
             url = None
         if url:
             stop["image_url"] = url
@@ -373,7 +377,7 @@ async def _prefetch_stop_images(itinerary: list[dict]) -> None:
     if not tasks:
         return
 
-    await asyncio.gather(*tasks)
+    await asyncio.gather(*tasks, return_exceptions=True)
     enriched = sum(1 for day in itinerary for s in day.get("stops", []) if "image_url" in s)
     degraded = len(tasks) - enriched
     logger.info(
