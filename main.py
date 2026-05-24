@@ -435,6 +435,7 @@ def _prepare_context(
     user_id: str,
     guide_name: str | None,
     guide_wechat: str | None,
+    guide_phone: str | None,
     booking_aid: str | None,
     security_mode: str,
 ) -> dict:
@@ -476,6 +477,7 @@ def _prepare_context(
     return {
         "guide_name": guide_name or "",
         "guide_wechat": guide_wechat or "",
+        "guide_phone": guide_phone or "",
         "guide_verified": bool(guide_name),
         "user_id": user_id,
         "title": title,
@@ -1385,6 +1387,10 @@ class ItineraryRequest(BaseModel):
         default=None, max_length=64,
         description="司导微信号，用于白标页面联系方式展示",
     )
+    guide_phone: str | None = Field(
+        default=None, max_length=32,
+        description="司导电话号码，如 +39 123 456 789，用于行程单头部拨打链接",
+    )
 
 
 class GenerateResponse(BaseModel):
@@ -1518,6 +1524,7 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
     structured_final = data  # 使用已富化的 data（含停车场+图片URL），不重新解析
     structured_final["_guide_name"] = req.guide_name
     structured_final["_guide_wechat"] = req.guide_wechat
+    structured_final["_guide_phone"] = req.guide_phone
 
     # --- PostgreSQL 写入 + 生成分享链接 ---
     itinerary_id = str(uuid.uuid4())
@@ -1603,6 +1610,7 @@ async def share_itinerary(request: Request, itinerary_id: str):
 
     guide_name = structured.pop("_guide_name", None)
     guide_wechat = structured.pop("_guide_wechat", None)
+    guide_phone = structured.pop("_guide_phone", None)
 
     # 构建模板上下文
     try:
@@ -1611,6 +1619,7 @@ async def share_itinerary(request: Request, itinerary_id: str):
             user_id=record["user_id"],
             guide_name=guide_name,
             guide_wechat=guide_wechat,
+            guide_phone=guide_phone,
             booking_aid=record["booking_aid"],
             security_mode=record["security_mode"],
         )

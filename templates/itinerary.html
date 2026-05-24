@@ -113,6 +113,20 @@
   <div class="flex items-center gap-4 mt-5 text-sm text-white/60">
     <span>{{ total_days }} 天行程</span>
     {% if price_range %}<span class="text-gold font-semibold text-base">{{ price_range }}/团/车</span>{% else %}<span>{{ budget }}</span>{% endif %}
+    {% if guide_name %}
+    <span class="text-white/50">&emsp;&emsp;</span>
+    <span class="font-bold text-white text-sm">
+      {{ guide_name }}
+      {% if guide_phone %}
+      {% set digits = guide_phone | string %}
+      {% if digits and digits | length > 4 %}
+      <a href="tel:{{ digits | replace(' ', '') }}" class="hover:text-gold transition-colors">{{ digits }}</a>
+      {% else %}
+      {{ digits }}
+      {% endif %}
+      {% endif %}
+    </span>
+    {% endif %}
   </div>
 </header>
 
