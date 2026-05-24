@@ -191,6 +191,19 @@
 
 <!-- ====== Day Cards ====== -->
 {% for day in days %}
+<!-- Attraction Image Strip -->
+{% set day_idx = loop.index0 %}
+{% if day_images and day_images.get(day_idx) %}
+<div class="flex gap-2 overflow-x-auto px-4 mb-3 -mt-1">
+  {% for img in day_images[day_idx] %}
+  <img src="{{ img.url }}" alt="{{ img.name }}"
+       class="h-32 w-auto rounded-xl object-cover flex-shrink-0 shadow-sm"
+       loading="lazy"
+       onerror="this.style.display='none'">
+  {% endfor %}
+</div>
+{% endif %}
+
 <section class="mb-5">
   <div class="bg-white rounded-2xl card-shadow overflow-hidden border border-blush/30">
 

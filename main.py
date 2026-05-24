@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
+import requests
 from databases import Database
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -212,6 +213,100 @@ def _prepare_context(
         "master_schedule": master_schedule,
         "days": days,
     }
+
+
+# ===========================================================================
+# 景点图片抓取（Wikipedia REST API，免费无 Key）
+# ===========================================================================
+WIKI_API = "https://en.wikipedia.org/w/api.php"
+
+
+def _fetch_images_for_attraction(name: str) -> list[str]:
+    """抓取单个景点的 Wikipedia 高清图片 URL（最多 1 张）。
+
+    使用 Wikipedia 的 pageimages API，返回 800px 宽的缩略图。
+    Google Custom Search 可作为未来升级路径（需 GOOGLE_API_KEY + GOOGLE_CSE_ID）。
+    """
+    if not name:
+        return []
+    try:
+        # Step 1: OpenSearch 找到最匹配的 Wikipedia 词条
+        search_params = {
+            "action": "opensearch",
+            "search": name,
+            "limit": 1,
+            "namespace": 0,
+            "format": "json",
+        }
+        r = requests.get(WIKI_API, params=search_params, timeout=8)
+        r.raise_for_status()
+        data = r.json()
+        titles = data[1] if len(data) > 1 else []
+        if not titles:
+            return []
+        title = titles[0]
+
+        # Step 2: 获取词条主图（pageimages prop）
+        img_params = {
+            "action": "query",
+            "titles": title,
+            "prop": "pageimages",
+            "pithumbsize": 800,
+            "format": "json",
+        }
+        r2 = requests.get(WIKI_API, params=img_params, timeout=8)
+        r2.raise_for_status()
+        pages = r2.json().get("query", {}).get("pages", {})
+        for page in pages.values():
+            thumb = page.get("thumbnail", {}).get("source")
+            if thumb:
+                return [thumb]
+        return []
+    except Exception:
+        return []
+
+
+async def _fetch_day_images(days: list[dict]) -> dict[int, list[dict]]:
+    """为每天的 Top 4 景点并发抓取代表性图片。
+
+    每天最多 4 张，每景点取 1 张 Wikipedia 主图。
+    所有请求通过 asyncio.to_thread 并发执行，不阻塞事件循环。
+    """
+    if not days:
+        return {}
+
+    async def _fetch_one(day_idx: int, stop_name: str, stop_idx: int) -> tuple[int, int, str] | None:
+        urls = await asyncio.to_thread(_fetch_images_for_attraction, stop_name)
+        if urls:
+            return (day_idx, stop_idx, urls[0])
+        return None
+
+    # 每天取前 4 个景点的图片
+    tasks = []
+    for day_idx, day in enumerate(days):
+        stops = day.get("stops", [])
+        for stop_idx, stop in enumerate(stops[:4]):
+            name = stop.get("name", "")
+            if name:
+                tasks.append(_fetch_one(day_idx, name, stop_idx))
+
+    if not tasks:
+        return {}
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    day_images: dict[int, list[dict]] = {}
+    for result in results:
+        if isinstance(result, tuple):
+            day_idx, stop_idx, url = result
+            if day_idx not in day_images:
+                day_images[day_idx] = []
+            day_images[day_idx].append({
+                "url": url,
+                "name": days[day_idx]["stops"][stop_idx].get("name", ""),
+            })
+
+    return day_images
 
 
 # ===========================================================================
@@ -516,6 +611,14 @@ async def share_itinerary(request: Request, itinerary_id: str):
         logger.error("Context preparation failed: id=%s error=%s\n%s",
                      itinerary_id, exc, traceback.format_exc())
         return HTMLResponse(content=ERROR_HTML, status_code=500)
+
+    # 抓取每日景点代表性图片（Wikipedia API，并发非阻塞）
+    try:
+        day_images = await _fetch_day_images(context["days"])
+        context["day_images"] = day_images
+    except Exception as exc:
+        logger.warning("Image fetch skipped for id=%s: %s", itinerary_id, exc)
+        context["day_images"] = {}
 
     # Jinja2 实时渲染
     try:
