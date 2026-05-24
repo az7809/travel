@@ -702,10 +702,12 @@ async def share_itinerary(request: Request, itinerary_id: str):
     # 报价计算
     try:
         quote = calculate_quote(context["days"])
-        context["quote"] = quote
+        low = int(quote["grand_total_eur"] * 1.1)
+        high = int(quote["grand_total_eur"] * 1.2)
+        context["price_range"] = f"€{low:,}–€{high:,}"
     except Exception as exc:
         logger.warning("Quote calculation skipped for id=%s: %s", itinerary_id, exc)
-        context["quote"] = None
+        context["price_range"] = None
 
     # Jinja2 实时渲染
     try:
