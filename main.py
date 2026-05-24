@@ -147,21 +147,28 @@ logger.info("Jinja2 environment loaded (%d template(s) in %s)",
 
 
 # ── 图片缓存 & Google Custom Search API ──────────────────
-_IMAGE_CACHE: dict[str, str | None] = {}  # key: normalized name → url or None (negative cache)
+_IMAGE_CACHE: dict[str, str | None] = {}  # normalized name → url or None (negative cache)
+_DEGRADATION_COUNT: int = 0               # cumulative fallback-to-Picsum counter
 
 
+# 建议在 Google Programmable Search Engine 控制面板中将以下域名加入"要搜索的网站"：
+#   unsplash.com/*, pixabay.com/*, wikipedia.org/*
+# 这样 API 结果会天然偏向高质量无版权图源。
 def _fetch_google_image_sync(target_name: str) -> str | None:
-    """同步调用 Google Custom Search API，返回实景图片直链。
+    """调用 Google Custom Search API 搜索实景图片。
 
-    失败时返回 None，调用方负责降级到 Picsum 兜底图源。
-    API 配额耗尽（403）或网络超时均被静默吞掉，不抛出异常。
+    在 q 参数中追加 quality 信号词提升搜索结果相关性。
+    失败时返回 None，调用方降级到 Picsum 兜底图源。
+    API 配额耗尽（403）或网络超时均被吞掉，不抛出异常。
     """
+    global _DEGRADATION_COUNT
     if not _GOOGLE_IMAGE_ENABLED or not target_name:
         return None
 
     cache_key = target_name.strip().lower()
-    if cache_key in _IMAGE_CACHE:
-        return _IMAGE_CACHE[cache_key]
+    cached = _IMAGE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached  # may be str (positive) or None (negative cache hit)
 
     try:
         r = requests.get(
@@ -169,51 +176,86 @@ def _fetch_google_image_sync(target_name: str) -> str | None:
             params={
                 "key": GOOGLE_API_KEY,
                 "cx": GOOGLE_CX,
-                "q": target_name,
+                "q": f"{target_name} landmark travel",
                 "searchType": "image",
                 "num": 1,
                 "imgSize": "xlarge",
+                "safe": "active",
             },
-            timeout=8,
+            timeout=6,  # HTTP 层超时 6s（留给 asyncio 层的 4s 预算足够）
         )
         if r.status_code == 403:
-            logger.warning("Google Image API quota exceeded (403) — falling back to Picsum")
+            logger.warning(
+                "[IMG_DEGRADE] Google API quota exhausted (HTTP 403) — "
+                "falling back to Picsum | total degradations: %d",
+                _DEGRADATION_COUNT + 1,
+            )
+            _DEGRADATION_COUNT += 1
             _IMAGE_CACHE[cache_key] = None
             return None
         r.raise_for_status()
         items = r.json().get("items", [])
-        if items:
-            url = items[0]["link"]
-            _IMAGE_CACHE[cache_key] = url
-            logger.info("Google Image found for %s", target_name)
-            return url
+        if not items:
+            logger.info("[IMG_DEGRADE] Google API returned 0 results for %q — falling back to Picsum", target_name)
+            _DEGRADATION_COUNT += 1
+            _IMAGE_CACHE[cache_key] = None
+            return None
+        url = items[0]["link"]
+        _IMAGE_CACHE[cache_key] = url
+        logger.info("[IMG_OK] Google image resolved for %q (%d chars)", target_name, len(url))
+        return url
+    except requests.Timeout:
+        logger.info("[IMG_DEGRADE] Google API timeout (6s) for %q — falling back to Picsum", target_name)
+        _DEGRADATION_COUNT += 1
     except Exception as exc:
-        logger.warning("Google Image fetch failed for %s: %s", target_name, exc)
+        logger.info(
+            "[IMG_DEGRADE] Google API unreachable for %q (%s: %s) — "
+            "falling back to Picsum | total degradations: %d",
+            target_name, type(exc).__name__, exc,
+            _DEGRADATION_COUNT + 1,
+        )
+        _DEGRADATION_COUNT += 1
 
-    _IMAGE_CACHE[cache_key] = None  # negative cache to avoid repeated failures
+    _IMAGE_CACHE[cache_key] = None
     return None
 
 
 async def _prefetch_stop_images(itinerary: list[dict]) -> None:
-    """批量预加载所有 stop 的 Google 实景图片，注入 image_url 字段。
+    """批量预加载所有 stop 的 Google 实景图片。
 
-    所有 API 调用通过 asyncio.to_thread 并发执行，
-    失败 stop 不写入 image_url，模板端自动降级到 Picsum。
+    每 stop 上限 4s（asyncio.wait_for），超时自动降级 Picsum。
+    所有 stop 通过 asyncio.gather 并发执行，总耗时 = max(单 stop 耗时)。
     """
+    _GOOGLE_PER_STOP_TIMEOUT = 4.0
 
     async def _fetch_one(stop: dict) -> None:
         name = stop.get("name", "")
         if not name or "image_url" in stop:
             return
-        url = await asyncio.to_thread(_fetch_google_image_sync, name)
+        try:
+            url = await asyncio.wait_for(
+                asyncio.to_thread(_fetch_google_image_sync, name),
+                timeout=_GOOGLE_PER_STOP_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.info("[IMG_DEGRADE] Pre-fetch timeout (%.0fs) for %q — falling back to Picsum",
+                        _GOOGLE_PER_STOP_TIMEOUT, name)
+            _DEGRADATION_COUNT += 1
+            url = None
         if url:
             stop["image_url"] = url
 
     tasks = [_fetch_one(s) for day in itinerary for s in day.get("stops", [])]
-    if tasks:
-        await asyncio.gather(*tasks)
-        enriched = sum(1 for day in itinerary for s in day.get("stops", []) if "image_url" in s)
-        logger.info("Image pre-fetch complete: %d/%d stops enriched", enriched, len(tasks))
+    if not tasks:
+        return
+
+    await asyncio.gather(*tasks)
+    enriched = sum(1 for day in itinerary for s in day.get("stops", []) if "image_url" in s)
+    degraded = len(tasks) - enriched
+    logger.info(
+        "[IMG_PREFETCH] complete: %d/%d enriched, %d degraded (cumulative degradations: %d)",
+        enriched, len(tasks), degraded, _DEGRADATION_COUNT,
+    )
 
 
 # ── 模板辅助函数 & Jinja2 过滤器 ────────────────────────

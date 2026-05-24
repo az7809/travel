@@ -44,13 +44,33 @@
     background: linear-gradient(135deg, rgba(201,169,110,0.15) 0%, rgba(201,169,110,0.05) 100%);
   }
   .image-card img {
-    transition: transform 0.4s ease;
+    transition: transform 0.4s ease, opacity 0.5s ease;
   }
   .image-card:hover img {
     transform: scale(1.03);
   }
   .timeline-dot {
     box-shadow: 0 0 0 3px rgba(201,169,110,0.2);
+  }
+  /* Skeleton loading shimmer */
+  .skeleton-wrap {
+    background: linear-gradient(90deg, #e5e5e5 25%, #f5f5f5 50%, #e5e5e5 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .skeleton-wrap img {
+    opacity: 0;
+  }
+  .skeleton-wrap img.loaded {
+    opacity: 1;
+  }
+  /* Floating contact bubble */
+  #contactBubble {
+    transition: opacity 0.5s ease, transform 0.5s ease;
   }
 </style>
 </head>
@@ -217,13 +237,16 @@
       <!-- Content card -->
       <div class="bg-white rounded-xl card-shadow overflow-hidden border border-neutral-100 image-card">
 
-        <!-- Image: Google API pre-fetched, fallback to Picsum -->
+        <!-- Image: Google API pre-fetched → Picsum fallback → placehold.co -->
         {% if stop.name %}
-        <img src="{{ stop.image_url if stop.image_url else (stop.name | unsplash) }}"
-             alt="{{ stop.name }}"
-             class="w-full h-56 object-cover"
-             loading="lazy"
-             onerror="this.onerror=null;this.src='https://placehold.co/800x600?text=Image+Unavailable';">
+        <div class="skeleton-wrap w-full h-56 overflow-hidden">
+          <img src="{{ stop.image_url if stop.image_url else (stop.name | unsplash) }}"
+               alt="{{ stop.name }}"
+               class="w-full h-56 object-cover object-center"
+               loading="lazy"
+               onload="this.classList.add('loaded')"
+               onerror="this.onerror=null;this.src='https://placehold.co/800x600?text=Image+Unavailable';this.classList.add('loaded');">
+        </div>
         {% endif %}
 
         <!-- Card body -->
@@ -451,5 +474,66 @@
 </footer>
 
 </main>
+
+<!-- ====== Floating Contact Bubble (scroll-triggered) ====== -->
+{% if guide_wechat or guide_name %}
+<div id="contactBubble"
+     class="fixed bottom-6 right-6 z-40 opacity-0 translate-y-4 pointer-events-none">
+  <button onclick="document.getElementById('contactModal').classList.remove('hidden')"
+          class="pointer-events-auto bg-green-500 hover:bg-green-600 active:scale-95
+                 text-white rounded-full shadow-lg pl-3 pr-5 py-3
+                 flex items-center gap-2.5 transition-all duration-200">
+    <span class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl">💬</span>
+    <div class="text-left leading-tight">
+      <p class="text-sm font-bold">联系司导</p>
+      <p class="text-[11px] opacity-80">WhatsApp / 微信</p>
+    </div>
+  </button>
+</div>
+
+<!-- Contact Modal -->
+<div id="contactModal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+     role="dialog" aria-modal="true">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+       onclick="document.getElementById('contactModal').classList.add('hidden')"></div>
+  <div class="relative bg-white rounded-t-2xl sm:rounded-2xl max-w-sm w-full mx-auto
+              p-6 card-shadow animate-[modal-in_0.2s_ease-out]">
+    <button onclick="document.getElementById('contactModal').classList.add('hidden')"
+            class="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 text-2xl leading-none">&times;</button>
+    <h3 class="font-serif text-lg font-bold text-neutral-800 mb-4">📞 联系司导</h3>
+    <div class="space-y-4">
+      {% if guide_wechat %}
+      <div class="bg-green-50 rounded-xl p-4 border border-green-100">
+        <p class="text-xs text-green-600 uppercase tracking-wide font-bold mb-1">微信 / WeChat</p>
+        <p class="text-lg font-mono font-bold text-green-800 select-all">{{ guide_wechat }}</p>
+        <p class="text-xs text-green-600 mt-2">点击微信号复制，打开微信添加好友</p>
+      </div>
+      {% endif %}
+      <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+        <p class="text-xs text-blue-600 uppercase tracking-wide font-bold mb-1">WhatsApp</p>
+        <p class="text-sm text-blue-700">请联系 {{ guide_name or '司导' }} 获取 WhatsApp 联系方式</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var bubble = document.getElementById('contactBubble');
+  var shown = false;
+  window.addEventListener('scroll', function() {
+    var past = window.scrollY > 300;
+    if (past && !shown) {
+      bubble.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+      shown = true;
+    } else if (!past && shown) {
+      bubble.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+      shown = false;
+    }
+  }, {passive: true});
+})();
+</script>
+{% endif %}
+
 </body>
 </html>
