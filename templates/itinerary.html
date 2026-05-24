@@ -55,13 +55,13 @@
 {% if guide_name %}
 <div class="guide-badge border-b border-gold/10 px-5 py-2.5 flex items-center justify-between">
   <div class="flex items-center gap-2">
-    <span class="w-6 h-6 rounded-full bg-gold/20 flex items-center justify-center text-gold text-xs font-bold">G</span>
-    <span class="text-xs text-warm font-medium">{{ guide_name }}</span>
+    <span class="w-6 h-6 rounded-full bg-gold/20 flex items-center justify-center text-gold text-sm font-bold">G</span>
+    <span class="text-sm text-warm font-medium">{{ guide_name }}</span>
     {% if guide_verified %}
-    <span class="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✓ 认证司导</span>
+    <span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✓ 认证司导</span>
     {% endif %}
   </div>
-  <div class="text-xs text-warm/50">
+  <div class="text-sm text-warm/50">
     {% if guide_wechat %}微信: {{ guide_wechat }}{% endif %}
   </div>
 </div>
@@ -69,16 +69,16 @@
 
 <!-- ====== Hero Header ====== -->
 <header class="hero-gradient text-white px-5 pt-12 pb-10 {% if not guide_name %}rounded-b-[2rem]{% endif %}">
-  <p class="text-xs tracking-[0.25em] uppercase text-gold/80 mb-2 font-medium">Itinéraire sur Mesure</p>
-  <h1 class="font-serif text-3xl leading-tight font-semibold tracking-tight text-balance">
+  <p class="text-sm tracking-[0.25em] uppercase text-gold/80 mb-2 font-medium">Itinéraire sur Mesure</p>
+  <h1 class="font-serif text-4xl leading-tight font-semibold tracking-tight text-balance">
     {{ title }}
   </h1>
   <div class="flex flex-wrap gap-2 mt-4">
     {% for city in cities %}
-    <span class="bg-white/15 backdrop-blur text-xs px-3 py-1 rounded-full border border-white/10">{{ city }}</span>
+    <span class="bg-white/15 backdrop-blur text-sm px-3 py-1 rounded-full border border-white/10">{{ city }}</span>
     {% endfor %}
   </div>
-  <div class="flex gap-5 mt-5 text-sm text-white/70">
+  <div class="flex gap-5 mt-5 text-base text-white/70">
     <span>{{ total_days }} 天行程</span>
     <span>{{ budget }}</span>
   </div>
@@ -93,26 +93,26 @@
               bg-gradient-to-br from-[#1a1a2e] via-[#2C2416] to-[#0f0f0f]
               border border-gold/40">
     <div class="flex items-center gap-2 mb-3">
-      <span class="text-xl">👑</span>
-      <h2 class="font-serif text-base font-semibold text-gold tracking-wide">
+      <span class="text-2xl">👑</span>
+      <h2 class="font-serif text-lg font-semibold text-gold tracking-wide">
         全包定制 · 尊贵加项
       </h2>
-      <span class="ml-auto bg-gold/20 text-gold text-[10px] px-2 py-0.5 rounded-full
+      <span class="ml-auto bg-gold/20 text-gold text-xs px-2 py-0.5 rounded-full
                    tracking-widest uppercase font-medium">
         Concierge
       </span>
     </div>
     <div class="flex items-start gap-3">
-      <span class="text-2xl mt-0.5">🛡️</span>
+      <span class="text-3xl mt-0.5">🛡️</span>
       <div>
-        <h3 class="font-serif text-sm font-semibold text-white/90 mb-2">
+        <h3 class="font-serif text-base font-semibold text-white/90 mb-2">
           时装周级别 · 影子安保协议
         </h3>
-        <p class="text-sm text-white/60 leading-relaxed whitespace-pre-line">
+        <p class="text-base text-white/60 leading-relaxed whitespace-pre-line">
           {{ security_risk }}
         </p>
         <div class="mt-3 pt-3 border-t border-white/10 flex items-center gap-2
-                    text-[10px] text-gold/60 uppercase tracking-widest">
+                    text-xs text-gold/60 uppercase tracking-widest">
           <span>24/7 紧急响应</span>
           <span class="text-white/20">·</span>
           <span>实时位置追踪</span>
@@ -125,7 +125,7 @@
     <div class="mt-4 pt-3 border-t border-white/10">
       <button onclick="document.getElementById('concierge-modal').classList.remove('hidden')"
               class="w-full bg-gold hover:bg-gold/90 active:scale-[0.98] transition-all
-                     text-ink font-semibold text-sm py-3 rounded-xl tracking-wide">
+                     text-ink font-semibold text-base py-3 rounded-xl tracking-wide">
         👑 一键升级特护伴游
       </button>
     </div>
@@ -144,20 +144,20 @@
     <!-- Header -->
     <div class="bg-gradient-to-r from-gold/20 to-transparent px-5 py-4 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <span class="text-xl">🛡️</span>
-        <h3 class="font-serif text-base font-semibold text-gold">特护伴游 · 官方安全调度</h3>
+        <span class="text-2xl">🛡️</span>
+        <h3 class="font-serif text-lg font-semibold text-gold">特护伴游 · 官方安全调度</h3>
       </div>
       <button onclick="document.getElementById('concierge-modal').classList.add('hidden')"
-              class="text-white/40 hover:text-white/80 text-2xl leading-none transition-colors">&times;</button>
+              class="text-white/40 hover:text-white/80 text-3xl leading-none transition-colors">&times;</button>
     </div>
     <!-- Body -->
-    <div class="p-5 text-sm text-white/70 leading-relaxed space-y-4">
+    <div class="p-5 text-base text-white/70 leading-relaxed space-y-4">
       <p>感谢您选择时装周特护伴游服务。为确保运力调度与安保备案合规，请通过以下官方渠道联系平台安全中心完成报备：</p>
       <div class="bg-white/5 rounded-xl p-4 text-center border border-white/10">
-        <p class="text-xs text-white/40 uppercase tracking-widest mb-2">平台官方安全号</p>
-        <p class="text-gold font-mono text-lg font-bold tracking-wide select-all">QF_SECURITY_OFFICIAL</p>
+        <p class="text-sm text-white/40 uppercase tracking-widest mb-2">平台官方安全号</p>
+        <p class="text-gold font-mono text-xl font-bold tracking-wide select-all">QF_SECURITY_OFFICIAL</p>
       </div>
-      <p class="text-xs text-white/40 leading-relaxed">
+      <p class="text-sm text-white/40 leading-relaxed">
         联系官方安全中心后，专属安保团队将在 2 小时内完成运力报备、实时位置追踪链路开通及使馆备案。全程加密通讯，保障司导与客户双方隐私安全。
       </p>
     </div>
@@ -177,12 +177,12 @@
 <section class="mb-5">
   <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 card-shadow">
     <div class="flex items-start gap-3">
-      <span class="text-2xl">⚠️</span>
+      <span class="text-3xl">⚠️</span>
       <div class="flex-1 min-w-0">
-        <h2 class="font-serif text-base font-semibold text-amber/90 mb-2">
+        <h2 class="font-serif text-lg font-semibold text-amber/90 mb-2">
           行程超限警告
         </h2>
-        <p class="text-sm text-warm leading-relaxed">{{ warning }}</p>
+        <p class="text-base text-warm leading-relaxed">{{ warning }}</p>
       </div>
     </div>
   </div>
@@ -198,13 +198,13 @@
     <div class="flex items-center justify-between px-5 py-4 border-b border-blush/20
                 bg-gradient-to-r from-white to-cream">
       <div class="flex items-center gap-3">
-        <span class="font-serif text-2xl font-bold text-gold">{{ day.day }}</span>
+        <span class="font-serif text-3xl font-bold text-gold">{{ day.day }}</span>
         <div>
-          <p class="text-xs text-warm/60">{{ day.date }}</p>
-          <p class="font-serif text-lg font-semibold text-ink">{{ day.headline or day.city }}</p>
+          <p class="text-sm text-warm/60">{{ day.date }}</p>
+          <p class="font-serif text-xl font-semibold text-ink">{{ day.headline or day.city }}</p>
         </div>
       </div>
-      <div class="text-right text-xs text-warm/50">
+      <div class="text-right text-sm text-warm/50">
         <p>驾驶 {{ day.driving_hours }}h</p>
         <p>工时 {{ day.total_work_hours }}h</p>
       </div>
@@ -217,11 +217,11 @@
         <div class="w-1.5 h-1.5 rounded-full {{ stop.dot_color }} mt-2 flex-shrink-0"></div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-2">
-            <h5 class="text-sm font-medium text-ink truncate">{{ stop.name }}</h5>
-            <span class="text-xs text-warm/40 flex-shrink-0">{{ stop.arrival }} – {{ stop.departure }}</span>
+            <h5 class="text-base font-medium text-ink truncate">{{ stop.name }}</h5>
+            <span class="text-sm text-warm/40 flex-shrink-0">{{ stop.arrival }} – {{ stop.departure }}</span>
           </div>
           <details class="mt-1.5 group">
-            <summary class="flex items-center gap-1 text-xs text-gold cursor-pointer
+            <summary class="flex items-center gap-1 text-sm text-gold cursor-pointer
                             hover:text-gold/80 transition-colors">
               <span>📖 司导讲解</span>
               <svg class="w-3 h-3 chevron transition-transform duration-200"
@@ -230,7 +230,7 @@
                       stroke-width="2" d="M19 9l-7 7-7-7"/>
               </svg>
             </summary>
-            <p class="text-xs text-warm leading-relaxed mt-2 pl-0.5">
+            <p class="text-sm text-warm leading-relaxed mt-2 pl-0.5">
               {{ stop.notes }}
             </p>
           </details>
@@ -243,10 +243,10 @@
     {% if day.recommended_restaurants %}
     <div class="mt-6 pt-4 border-t border-dashed {{ 'border-neutral-800' if security_mode == 'concierge' else 'border-neutral-200' }}">
       <div class="flex items-center space-x-2 mb-3">
-        <span class="text-xs font-bold tracking-wide px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <span class="text-sm font-bold tracking-wide px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
           📊 GOOGLE MAP TOP推荐
         </span>
-        <h4 class="text-xs font-bold {{ 'text-neutral-300' if security_mode == 'concierge' else 'text-neutral-700' }}">
+        <h4 class="text-sm font-bold {{ 'text-neutral-300' if security_mode == 'concierge' else 'text-neutral-700' }}">
           司导精选 · 景点周边高分美食（{{ day.recommended_restaurants|length }}家）
         </h4>
       </div>
@@ -255,16 +255,16 @@
         <div class="p-3 rounded-xl border transition-all {{ 'bg-neutral-950/40 border-neutral-800/60' if security_mode == 'concierge' else 'bg-neutral-50/60 border-neutral-100 hover:bg-neutral-50' }}">
           <div class="flex items-start justify-between space-x-2">
             <div>
-              <h5 class="text-xs font-bold {{ 'text-neutral-200' if security_mode == 'concierge' else 'text-neutral-800' }}">
+              <h5 class="text-sm font-bold {{ 'text-neutral-200' if security_mode == 'concierge' else 'text-neutral-800' }}">
                 {{ rest.name }}
               </h5>
-              <p class="text-[11px] {{ 'text-neutral-400' if security_mode == 'concierge' else 'text-neutral-500' }} mt-1 leading-relaxed">
+              <p class="text-[13px] {{ 'text-neutral-400' if security_mode == 'concierge' else 'text-neutral-500' }} mt-1 leading-relaxed">
                 {{ rest.highlight }}
               </p>
             </div>
             <div class="text-right shrink-0">
-              <span class="text-xs font-black text-amber-500 font-mono">{{ rest.google_rating }}</span>
-              <p class="text-[10px] text-neutral-500 font-mono mt-0.5">{{ rest.price_level }} · {{ rest.distance }}</p>
+              <span class="text-sm font-black text-amber-500 font-mono">{{ rest.google_rating }}</span>
+              <p class="text-xs text-neutral-500 font-mono mt-0.5">{{ rest.price_level }} · {{ rest.distance }}</p>
             </div>
           </div>
         </div>
@@ -277,16 +277,16 @@
     {% if day.driver_parking %}
     <div class="mt-4 pt-4 border-t border-dashed border-neutral-200">
       <div class="flex items-center space-x-2 mb-3">
-        <span class="text-xs font-bold tracking-wide px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+        <span class="text-sm font-bold tracking-wide px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
           🅿️ 司导执勤
         </span>
-        <h4 class="text-xs font-bold text-neutral-700">
+        <h4 class="text-sm font-bold text-neutral-700">
           停车场数据 · V-Class 兼容（{{ day.driver_parking|length }}处）
         </h4>
       </div>
       <div class="space-y-2">
         {% for stop_name, info in day.driver_parking.items() %}
-        <div class="p-2.5 rounded-lg border border-neutral-100 bg-neutral-50/60 text-xs">
+        <div class="p-2.5 rounded-lg border border-neutral-100 bg-neutral-50/60 text-sm">
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
               <p class="font-medium text-ink truncate">{{ stop_name }}</p>
@@ -297,24 +297,24 @@
             </div>
             <div class="text-right shrink-0 space-y-0.5">
               {% if info.get('height_limit_m') is not none %}
-              <span class="text-[10px] font-mono font-bold {{ 'text-green-600' if info.height_limit_m >= 1.95 else 'text-red-500' }}">
+              <span class="text-xs font-mono font-bold {{ 'text-green-600' if info.height_limit_m >= 1.95 else 'text-red-500' }}">
                 ⬆{{ info.height_limit_m }}m
               </span>
               {% else %}
-              <span class="text-[10px] font-mono text-amber-500">⚠️限高待核实</span>
+              <span class="text-xs font-mono text-amber-500">⚠️限高待核实</span>
               {% endif %}
               {% if info.get('large_vehicle_ok') %}
-              <span class="text-[10px] text-green-600 block">✅ V-Class可入</span>
+              <span class="text-xs text-green-600 block">✅ V-Class可入</span>
               {% elif info.get('large_vehicle_ok') is sameas false %}
-              <span class="text-[10px] text-red-500 block">🚫 V-Class不可入</span>
+              <span class="text-xs text-red-500 block">🚫 V-Class不可入</span>
               {% endif %}
               {% if info.get('hourly_rate_eur') %}
-              <span class="text-[10px] text-warm/50 block">€{{ info.hourly_rate_eur }}/h</span>
+              <span class="text-xs text-warm/50 block">€{{ info.hourly_rate_eur }}/h</span>
               {% endif %}
             </div>
           </div>
           {% if info.get('notes') %}
-          <p class="text-[10px] text-warm/50 mt-1.5 leading-relaxed border-t border-neutral-100 pt-1.5">
+          <p class="text-xs text-warm/50 mt-1.5 leading-relaxed border-t border-neutral-100 pt-1.5">
             {{ info.notes }}
           </p>
           {% endif %}
@@ -328,27 +328,27 @@
     <div class="relative mx-4 my-4 rounded-xl overflow-hidden border border-blush/20
                 bg-gradient-to-br from-cream to-white">
       <div class="p-4 opacity-40 select-none pointer-events-none">
-        <h4 class="font-serif text-sm font-semibold text-ink mb-2">
+        <h4 class="font-serif text-base font-semibold text-ink mb-2">
           🚗 精确行车路线 & GPS 坐标
         </h4>
-        <p class="text-xs text-warm leading-relaxed">
+        <p class="text-sm text-warm leading-relaxed">
           含高速出口编号、加油站定位、免费停车点、收费站避让路线。
         </p>
-        <h4 class="font-serif text-sm font-semibold text-ink mt-3 mb-2">
+        <h4 class="font-serif text-base font-semibold text-ink mt-3 mb-2">
           🍽️ 避坑餐厅 & 订位链接
         </h4>
-        <p class="text-xs text-warm leading-relaxed">
+        <p class="text-sm text-warm leading-relaxed">
           {% if day.meals %}{{ day.meals | join('、') }}{% else %}包含司导私藏餐厅列表及预订链接{% endif %}
         </p>
       </div>
       <!-- Frosted glass overlay -->
       <div class="absolute inset-0 glass-lock bg-white/60 flex flex-col items-center
                   justify-center gap-2 rounded-xl">
-        <span class="text-2xl">🔒</span>
-        <p class="font-serif text-sm font-semibold text-ink text-center px-4">
+        <span class="text-3xl">🔒</span>
+        <p class="font-serif text-base font-semibold text-ink text-center px-4">
           预定后司导即送全套保姆级避坑路书
         </p>
-        <p class="text-xs text-warm/70 text-center px-6">
+        <p class="text-sm text-warm/70 text-center px-6">
           含精确 GPS 坐标 · 餐厅订位链接 · 高速避费路线
         </p>
       </div>
@@ -358,16 +358,16 @@
     <div class="px-5 pb-4">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-xs text-warm/50 uppercase tracking-wide">住宿推荐区域</p>
-          <p class="text-sm font-medium text-ink mt-0.5">{{ day.hotel_zone }}</p>
+          <p class="text-sm text-warm/50 uppercase tracking-wide">住宿推荐区域</p>
+          <p class="text-base font-medium text-ink mt-0.5">{{ day.hotel_zone }}</p>
           {% if day.hotel_features %}
-          <p class="text-xs text-warm/60 mt-0.5">设施需求：{{ day.hotel_features | join(' · ') }}</p>
+          <p class="text-sm text-warm/60 mt-0.5">设施需求：{{ day.hotel_features | join(' · ') }}</p>
           {% endif %}
         </div>
         <a href="https://www.booking.com/index.html?aid={{ booking_aid | default('QF_MAIN_DEFAULT_AID', true) }}"
            class="flex-shrink-0 inline-flex items-center gap-1.5
                   bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all
-                  text-white text-xs font-medium px-4 py-2.5 rounded-full">
+                  text-white text-sm font-medium px-4 py-2.5 rounded-full">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M3 12l2-2m0 0l7-7 7 7m-9 2v10m4-10v10"/>
@@ -387,24 +387,24 @@
   <div class="bg-white rounded-2xl card-shadow overflow-hidden border border-blush/30">
     <div class="px-5 py-4 border-b border-blush/20 bg-gradient-to-r from-white to-cream">
       <div class="flex items-center gap-2">
-        <span class="text-lg">📋</span>
-        <h2 class="font-serif text-base font-semibold text-ink">司导执勤总表</h2>
-        <span class="ml-auto text-xs text-warm/50">{{ master_schedule|length }} 个时段</span>
+        <span class="text-xl">📋</span>
+        <h2 class="font-serif text-lg font-semibold text-ink">司导执勤总表</h2>
+        <span class="ml-auto text-sm text-warm/50">{{ master_schedule|length }} 个时段</span>
       </div>
     </div>
     <div class="divide-y divide-blush/10">
       {% for slot in master_schedule %}
       <div class="px-5 py-3 flex items-start gap-3">
         <div class="w-14 shrink-0 text-right">
-          <span class="text-[10px] font-mono font-bold text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+          <span class="text-xs font-mono font-bold text-gold bg-gold/10 px-1.5 py-0.5 rounded">
             {{ slot.get("time_slot", "") }}
           </span>
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-ink">{{ slot.get("activity", "") }}</p>
-          <p class="text-xs text-warm/60 mt-0.5">{{ slot.get("location", "") }}</p>
+          <p class="text-base font-medium text-ink">{{ slot.get("activity", "") }}</p>
+          <p class="text-sm text-warm/60 mt-0.5">{{ slot.get("location", "") }}</p>
           {% if slot.get("driver_note") %}
-          <p class="text-[11px] text-warm/40 mt-1 italic">{{ slot.driver_note }}</p>
+          <p class="text-[13px] text-warm/40 mt-1 italic">{{ slot.driver_note }}</p>
           {% endif %}
         </div>
       </div>
@@ -418,10 +418,10 @@
 <section class="mt-8 mb-12">
   <div class="bg-white/60 backdrop-blur rounded-2xl px-5 py-5 card-shadow border border-blush/50">
     <div class="flex items-start gap-3">
-      <span class="text-xl mt-0.5">📋</span>
+      <span class="text-2xl mt-0.5">📋</span>
       <div>
-        <h3 class="font-serif text-base font-semibold text-ink mb-2">酒店免责声明</h3>
-        <p class="text-sm text-warm leading-relaxed">
+        <h3 class="font-serif text-lg font-semibold text-ink mb-2">酒店免责声明</h3>
+        <p class="text-base text-warm leading-relaxed">
           {{ hotel_disclaimer }}
         </p>
       </div>
@@ -430,7 +430,7 @@
 </section>
 
 <!-- ====== Footer ====== -->
-<footer class="text-center text-xs text-warm/50 pb-8">
+<footer class="text-center text-sm text-warm/50 pb-8">
   {% if guide_name %}
   <p class="text-warm/70 font-medium">{{ guide_name }} · 欧洲在地司导</p>
   {% if guide_wechat %}
