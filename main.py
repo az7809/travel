@@ -465,11 +465,11 @@ async def guide_entrance_page(request: Request):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Repository / Tour-Workbench</title>
+    <title>Tour Workbench</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap">
     <style>
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background-color: #f6f8fa; color: #24292f; }
+        body { font-family: -apple-system, "Microsoft YaHei", "Segoe UI", Helvetica, Arial, sans-serif; background-color: #f6f8fa; color: #24292f; }
         .code-font { font-family: 'Fira Code', monospace; }
         .github-border { border-color: #d0d7de; }
         .github-bg-card { background-color: #ffffff; }
@@ -479,65 +479,55 @@ async def guide_entrance_page(request: Request):
 </head>
 <body class="min-h-screen flex flex-col justify-between antialiased">
 
-    <header class="border-b github-border bg-[#ffffff] px-4 py-4 sm:px-16">
-        <div class="max-w-3xl mx-auto flex items-center space-x-2 text-sm">
-            <svg class="w-4 h-4 text-[#57606a]" viewBox="0 0 16 16" version="1.1" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"></path></svg>
-            <span class="font-semibold text-[#0969da] hover:underline cursor-pointer">EuroTourHub</span>
-            <span class="text-[#57606a]">/</span>
-            <span class="font-bold text-[#1f2328] code-font">itinerary-compiler</span>
-            <span class="text-xs px-2 py-0.5 rounded-full font-medium github-border border text-[#57606a] bg-[#eaeef2]">Public</span>
-        </div>
-    </header>
-
-    <main class="max-w-3xl w-full mx-auto px-4 py-12 flex-1">
+    <main class="max-w-3xl w-full mx-auto px-4 py-8 sm:py-12 flex-1">
         <div class="github-bg-card border github-border rounded-xl p-6 sm:p-8 shadow-sm">
 
             <div class="border-b github-border pb-4 mb-6">
-                <h2 class="text-lg font-semibold text-[#1f2328]">Create New Base Itinerary</h2>
-                <p class="text-xs text-[#57606a] mt-1">通过精简的指令自动化渲染云原生分布式客户行程单</p>
+                <h2 class="text-xl font-bold text-[#1f2328]">Create New Base Itinerary</h2>
+                <p class="text-sm text-[#57606a] mt-1.5">通过精简的指令自动化渲染云原生分布式客户行程单</p>
             </div>
 
             <form id="orderForm" class="space-y-6">
 
-                <div class="space-y-2">
-                    <label class="block text-xs font-semibold text-[#1f2328]">导游信息 (Guide Metadata)</label>
+                <div class="space-y-2.5">
+                    <label class="block text-sm font-bold text-[#1f2328]">导游信息 (Guide Metadata)</label>
                     <input type="text" id="userId" required
                            placeholder="例如：向导Alex (微信: alex_paris / 电话: +33 6 123456)"
-                           class="w-full border github-border rounded-lg px-3 py-2 text-sm github-input transition-all">
-                    <p class="text-[11px] text-[#57606a]">这些信息将作为动态白标直接注入到给客户浏览的网页最上方。</p>
+                           class="w-full border github-border rounded-lg px-3.5 py-3 text-base github-input transition-all">
+                    <p class="text-xs text-[#57606a]">这些信息将作为动态白标直接注入到给客户浏览的网页最上方。</p>
                 </div>
 
                 <input type="hidden" id="bookingAid" value="default_platform_partner">
 
                 <input type="hidden" id="securityMode" value="standard">
 
-                <div class="space-y-2">
-                    <label class="block text-xs font-semibold text-[#1f2328]">散客原始意向数据 (Raw Prompt Data)</label>
-                    <textarea id="rawText" required rows="6"
+                <div class="space-y-2.5">
+                    <label class="block text-sm font-bold text-[#1f2328]">散客原始意向数据 (Raw Prompt Data)</label>
+                    <textarea id="rawText" required rows="7"
                               placeholder="直接将微信聊天记录或零碎想法粘贴至此。例如：5月24号去巴黎，想看巴黎圣母院内部入内讲解，下午去看埃菲尔铁塔。推荐周边步行可达、Google Map好评最高的法餐厅..."
-                              class="w-full border github-border rounded-lg p-3 text-sm github-input transition-all leading-relaxed code-font resize-none"></textarea>
+                              class="w-full border github-border rounded-lg p-3.5 text-base github-input transition-all leading-relaxed code-font resize-none"></textarea>
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="w-full sm:w-auto px-5 py-2 bg-[#2da44e] hover:bg-[#2c974b] text-white font-medium text-xs rounded-lg border border-[rgba(27,31,36,0.15)] transition-all cursor-pointer shadow-sm">
+                    <button type="submit" class="w-full sm:w-auto px-6 py-2.5 bg-[#2da44e] hover:bg-[#2c974b] text-white font-semibold text-sm rounded-lg border border-[rgba(27,31,36,0.15)] transition-all cursor-pointer shadow-sm">
                         Run Build Script
                     </button>
                 </div>
             </form>
 
             <div id="resultBoard" class="mt-8 border github-border rounded-xl hidden bg-[#f6f8fa]">
-                <div class="bg-[#ffffff] border-b github-border px-4 py-2 flex items-center justify-between rounded-t-xl">
+                <div class="bg-[#ffffff] border-b github-border px-4 py-2.5 flex items-center justify-between rounded-t-xl">
                     <span class="text-xs font-mono text-[#57606a]">Console / stdout</span>
-                    <span class="text-[10px] bg-[#dafbe1] text-[#1a7f37] border border-[rgba(26,127,55,0.2)] px-2 py-0.5 rounded-full font-bold">Success</span>
+                    <span class="text-xs bg-[#dafbe1] text-[#1a7f37] border border-[rgba(26,127,55,0.2)] px-2.5 py-0.5 rounded-full font-bold">Success</span>
                 </div>
                 <div class="p-4 space-y-4">
-                    <div class="p-3 bg-[#ffffff] border github-border rounded-lg relative group">
-                        <span class="text-[10px] text-[#57606a] uppercase font-mono block">CLIENT SHARE URL:</span>
-                        <p id="shareUrl" class="text-xs font-mono text-[#0969da] break-all font-semibold mt-1.5 pr-16 select-all"></p>
-                        <button onclick="copyUrl()" class="absolute right-3 top-3 text-[11px] bg-[#f6f8fa] hover:bg-[#eaeef2] border github-border text-[#24292f] px-2.5 py-1 rounded-md cursor-pointer transition-colors">Copy</button>
+                    <div class="p-4 bg-[#ffffff] border github-border rounded-lg relative group">
+                        <span class="text-xs text-[#57606a] uppercase font-mono font-bold block">CLIENT SHARE URL:</span>
+                        <p id="shareUrl" class="text-sm font-mono text-[#0969da] break-all font-bold mt-2 pr-20 select-all"></p>
+                        <button onclick="copyUrl()" class="absolute right-3 top-4 text-xs bg-[#f6f8fa] hover:bg-[#eaeef2] border github-border text-[#24292f] px-3 py-1.5 rounded-md cursor-pointer transition-colors font-medium">Copy</button>
                     </div>
                     <div class="flex">
-                        <a id="previewBtn" target="_blank" class="text-center px-4 py-1.5 bg-[#ffffff] hover:bg-[#f6f8fa] border github-border text-[#24292f] text-xs font-medium rounded-md transition-colors shadow-sm cursor-pointer">
+                        <a id="previewBtn" target="_blank" class="text-center px-5 py-2 bg-[#ffffff] hover:bg-[#f6f8fa] border github-border text-[#24292f] text-sm font-medium rounded-md transition-colors shadow-sm cursor-pointer">
                             View Rendered HTML
                         </a>
                     </div>
@@ -549,7 +539,7 @@ async def guide_entrance_page(request: Request):
 
     <footer class="border-t github-border bg-[#eaeef2]/30 px-4 py-6 text-center text-xs text-[#57606a] space-y-1">
         <p class="code-font text-[11px]">Commit hash: d381505 · Environment: production</p>
-        <p>© 2026 EuroTourHub, Inc. Built for distributed tour guides.</p>
+        <p>&copy; 2026 EuroTourHub, Inc. Built for distributed tour guides.</p>
     </footer>
 
     <script>
@@ -557,7 +547,7 @@ async def guide_entrance_page(request: Request):
             e.preventDefault();
             const btn = e.target.querySelector('button[type="submit"]');
             btn.disabled = true;
-            btn.className = "w-full sm:w-auto px-5 py-2 bg-[#eaeef2] text-[#57606a] border github-border text-xs rounded-lg cursor-not-allowed font-mono animate-pulse";
+            btn.className = "w-full sm:w-auto px-6 py-2.5 bg-[#eaeef2] text-[#57606a] border github-border text-sm rounded-lg cursor-not-allowed font-mono animate-pulse";
             btn.innerText = "Executing deepseek-compiler...";
 
             const payload = {
@@ -586,7 +576,7 @@ async def guide_entrance_page(request: Request):
             } catch (err) {
                 alert('Error: ' + err.message);
             } finally {
-                btn.className = "w-full sm:w-auto px-5 py-2 bg-[#2da44e] hover:bg-[#2c974b] text-white font-medium text-xs rounded-lg border border-[rgba(27,31,36,0.15)] transition-all cursor-pointer shadow-sm";
+                btn.className = "w-full sm:w-auto px-6 py-2.5 bg-[#2da44e] hover:bg-[#2c974b] text-white font-semibold text-sm rounded-lg border border-[rgba(27,31,36,0.15)] transition-all cursor-pointer shadow-sm";
                 btn.innerText = "Run Build Script";
             }
         });
