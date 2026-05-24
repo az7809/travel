@@ -56,6 +56,80 @@ RESTAURANT_ENGINE_SPEC = """
 """
 
 # ---------------------------------------------------------------------------
+# 司导执勤 · 停车场数据引擎（V-Class / Minivan 优先）
+# ---------------------------------------------------------------------------
+DRIVER_PARKING_SPEC = """
+## 🅿️ 司导执勤 · 停车场数据引擎（V-Class / Minivan 优先）
+
+### 强制规则
+针对行程中**每一个 `stop`（景点/餐厅/购物点）**，必须在 `itinerary[].driver_parking` 字典中编译输出该景点的最近停车场信息。
+
+### driver_parking 字段结构（挂载在每个 day 对象下）
+```
+"driver_parking": {
+  "卢浮宫": {
+    "name": "Parking Indigo Louvre Samaritaine",
+    "address": "1 Place du Louvre, 75001 Paris",
+    "height_limit_m": 2.0,
+    "hourly_rate_eur": 4.5,
+    "walk_to_attraction_min": 5,
+    "large_vehicle_ok": true,
+    "notes": "地下停车场，V-Class 可入。限高 2.0m 为精确数据。入口在 Rue de l'Amiral de Coligny。19:00 后费率降至 €2.5/h。"
+  }
+}
+```
+
+### 字段说明
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | string | 停车场真实名称（中法/中意双语），方便司导直接导航 |
+| `address` | string | 精确街道地址 |
+| `height_limit_m` | number or null | **精确限高数字（米）**。若无法从可靠来源确认，必须设为 `null` 并注明"请现场核实" |
+| `hourly_rate_eur` | number or null | 每小时费率（欧元），无法确认则 `null` |
+| `walk_to_attraction_min` | number | 步行至景点入口分钟数 |
+| `large_vehicle_ok` | boolean | **V-Class / Mercedes Vito / 大众 Caravelle 等大型商务车可否停放** |
+| `notes` | string | 司导专属备注：入口位置、夜间费率变化、替代停车场建议 |
+
+### 筛选优先级（铁律）
+1. **大型商务车优先** — `large_vehicle_ok: true` 的停车场排在最前面。V-Class 车高 1.92m，任何限高 < 1.95m 的停车场直接标注 `large_vehicle_ok: false`。
+2. **限高精确到数字** — 禁止写"限高较低"或"限高一般"这种模糊描述。必须是具体数字如 `1.85`、`2.0`、`2.2`。若 Google Maps/官网均未标注限高数字，`height_limit_m` 设为 `null` 并在 `notes` 中写"⚠️ 限高数据缺失，请现场核实"。
+3. **步行距离 < 800m** — 超过此距离需在 `notes` 中说明原因（如景区步行区限制）。
+4. **每个 stop 必须覆盖** — 不能只给部分景点配停车场。餐厅类 stop 如果位于步行街内，`driver_parking` 中仍需给出最近的可停车点。
+
+### master_schedule 字段结构（挂载在顶层 JSON）
+```
+"master_schedule": [
+  {
+    "time_slot": "08:00-08:30",
+    "activity": "取车 + 出发前车检",
+    "location": "酒店地下车库",
+    "driver_note": "检查胎压、油箱、AdBlue 液位。确认 V-Class 后舱座椅已调至客户舒适模式。"
+  },
+  {
+    "time_slot": "08:30-09:00",
+    "activity": "接客 + 前往第一站",
+    "location": "酒店大堂 → 巴黎圣母院",
+    "driver_note": "避开 Rue de Rivoli 早高峰拥堵，走塞纳河左岸沿河路。"
+  }
+]
+```
+
+### master_schedule 字段说明
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `time_slot` | string | 时段区间，HH:MM-HH:MM 格式 |
+| `activity` | string | 活动描述（给司导看，不是给客户） |
+| `location` | string | 地点/路线 |
+| `driver_note` | string | 司导专属备注：路况、停车策略、加油站位置 |
+
+### 禁止行为
+- ❌ 禁止停车场只有名称没有限高数据 — 至少注明"待核实"
+- ❌ 禁止推荐限高 < 1.95m 的停车场给大型商务车
+- ❌ 禁止 `master_schedule` 为空数组 — 每天至少有取车→第一站→午餐→最后一站→还车的骨架
+- ❌ 禁止 `driver_parking` 字典为空 — 每个城市日必须覆盖所有 stop
+"""
+
+# ---------------------------------------------------------------------------
 # 基础 System Prompt（标准安全模式）
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
@@ -116,7 +190,27 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
           "distance": "距圣母院约 350 米 · 圣路易岛",
           "highlight": "巴黎本地人极度私藏的老牌法式小酒馆，油封鸭腿（Confit de Canard）与松露意面在 Google Map 上好评如潮。"
         }
-      ]
+      ],
+      "driver_parking": {
+        "巴黎圣母院": {
+          "name": "Parking Indigo Paris Notre-Dame",
+          "address": "10 Rue Lagrange, 75005 Paris",
+          "height_limit_m": 1.9,
+          "hourly_rate_eur": 3.8,
+          "walk_to_attraction_min": 3,
+          "large_vehicle_ok": false,
+          "notes": "限高 1.9m，V-Class (1.92m) 无法进入！替代方案：Parking Maubert Collège des Bernardins，限高 2.1m，步行 8 分钟。"
+        },
+        "卢浮宫": {
+          "name": "Parking Indigo Louvre Samaritaine",
+          "address": "1 Place du Louvre, 75001 Paris",
+          "height_limit_m": 2.0,
+          "hourly_rate_eur": 4.5,
+          "walk_to_attraction_min": 5,
+          "large_vehicle_ok": true,
+          "notes": "地下停车场，V-Class 可入。限高 2.0m 为精确数据。19:00 后费率降至 €2.5/h。"
+        }
+      }
     }
   ],
   "summary": {
@@ -125,6 +219,20 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
     "cities": ["Paris", "Lyon", "Nice"],
     "budget_range": "€2500-3500/人"
   },
+  "master_schedule": [
+    {
+      "time_slot": "08:00-08:30",
+      "activity": "取车 + 出发前车检",
+      "location": "酒店地下车库",
+      "driver_note": "检查胎压、油箱、AdBlue 液位。确认 V-Class 后舱座椅已调至客户舒适模式。"
+    },
+    {
+      "time_slot": "08:30-09:00",
+      "activity": "接客 + 前往第一站",
+      "location": "酒店大堂 → 巴黎圣母院",
+      "driver_note": "避开 Rue de Rivoli 早高峰拥堵，走塞纳河左岸沿河路。"
+    }
+  ],
   "warning": null,
   "security_risk": null,
   "hotel_disclaimer": "本行程仅提供酒店所在区域的 Booking 实时参考价格区间，不推荐具体酒店名称。价格随季节波动，请以实际预订为准。建议通过 Booking 筛选该区域真实评分 8.5+ 且评论数超过 200 的住宿。",
@@ -151,8 +259,16 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
 - `hotel_features`: 客户要求的酒店设施（从聊天记录提取）
 - `meals`: 推荐用餐点（可选）
 - `recommended_restaurants`: **（强制）** 5-10 家硬核餐厅推荐，每家必须含 name/google_rating/price_level/distance/highlight
+- `driver_parking`: **（强制）** 每个 stop 的停车场字典，key 为 stop name，value 含 name/address/height_limit_m/hourly_rate_eur/walk_to_attraction_min/large_vehicle_ok/notes
+
+### master_schedule（顶层字段）
+- `time_slot`: 时段区间，HH:MM-HH:MM 格式
+- `activity`: 活动描述（给司导看，不是给客户）
+- `location`: 地点/路线
+- `driver_note`: 司导专属备注：路况、停车策略、加油站位置
 
 """ + RESTAURANT_ENGINE_SPEC + """
+""" + DRIVER_PARKING_SPEC + """
 
 ### warning
 - 如果任意单日 `driving_hours > 4.5` 或 `total_work_hours > 10`，此字段必须填写具体的违规天数和原因。
@@ -178,6 +294,7 @@ SYSTEM_PROMPT_BASE = """你是一个拥有三重身份的现实主义者：
 6. **餐厅推荐是铁律** — 每个城市日必须铺满 5-10 家高分餐厅。这是 B2B2C 分销标准，少一家都不合格。
 7. **闭馆日是铁律** — 卢浮宫周二闭馆、凡尔赛/奥赛周一闭馆。撞上闭馆日必须在 notes 中 🚫 标注并给替代方案。
 8. **圣母院已开放是铁律** — 必须提示可入内参观并建议预约。
+9. **停车场数据是铁律** — 每个城市日的每个 stop 必须配 driver_parking 条目。限高必须精确到数字，无法确认则返回 null 并注明"请现场核实"。V-Class (1.92m) 兼容性必须标注。master_schedule 每天至少 5 个时段。
 """
 
 

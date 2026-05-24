@@ -163,10 +163,30 @@ def _prepare_context(
             {**s, "dot_color": _dot_color(s.get("type", "attraction"))}
             for s in d.get("stops", [])
         ]
-        days.append({**d, "stops": stops})
+
+        # --- driver_parking 防御性归一化 ---
+        # DeepSeek 可能返回 None / [] / 部分 key 为非 dict，强制清洗为安全 dict
+        raw_parking = d.get("driver_parking")
+        driver_parking: dict[str, dict] = {}
+        if isinstance(raw_parking, dict):
+            driver_parking = {
+                str(k): v for k, v in raw_parking.items()
+                if isinstance(v, dict) and v
+            }
+
+        days.append({**d, "stops": stops, "driver_parking": driver_parking})
 
     cities = summary.get("cities", [])
     title = " → ".join(cities) if cities else "欧洲定制行程"
+
+    # --- master_schedule 防御性归一化 ---
+    raw_schedule = data.get("master_schedule")
+    master_schedule: list[dict] = []
+    if isinstance(raw_schedule, list):
+        master_schedule = [
+            s for s in raw_schedule
+            if isinstance(s, dict) and s.get("time_slot")
+        ]
 
     return {
         "guide_name": guide_name or "",
@@ -182,6 +202,7 @@ def _prepare_context(
         "warning": data.get("warning") or "",
         "hotel_disclaimer": data.get("hotel_disclaimer", ""),
         "booking_aid": booking_aid or DEFAULT_BOOKING_AID,
+        "master_schedule": master_schedule,
         "days": days,
     }
 
@@ -228,7 +249,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="欧洲司导行程引擎",
     description="WeChat → DeepSeek → 分享链接 · 全自动异步流水线",
-    version="3.0.0",
+    version="3.1.0",
     lifespan=lifespan,
 )
 
@@ -364,6 +385,25 @@ async def generate_itinerary(req: ItineraryRequest, request: Request):
             status_code=500,
             detail="行程 JSON 缺少必需的 'itinerary' 字段，请检查 System Prompt 或聊天记录输入。",
         )
+
+    # --- 字段归一化：driver_parking / master_schedule ---
+    # DeepSeek 可能返回 None / [] / 非标准结构，此处强制归一化为安全默认值，
+    # 确保下游 _prepare_context() 和 Jinja2 模板不会因类型不匹配而崩溃。
+    for day in itinerary:
+        if not isinstance(day.get("driver_parking"), dict):
+            day["driver_parking"] = {}
+        else:
+            day["driver_parking"] = {
+                str(k): v for k, v in day["driver_parking"].items()
+                if isinstance(v, dict)
+            }
+
+    if not isinstance(data.get("master_schedule"), list):
+        data["master_schedule"] = []
+    else:
+        data["master_schedule"] = [
+            s for s in data["master_schedule"] if isinstance(s, dict)
+        ]
 
     # --- 将导游信息嵌入 JSON，统一落盘 ---
     structured_final = json.loads(content)

@@ -273,6 +273,57 @@
     </div>
     {% endif %}
 
+    <!-- ====== Driver Parking ====== -->
+    {% if day.driver_parking %}
+    <div class="mt-4 pt-4 border-t border-dashed border-neutral-200">
+      <div class="flex items-center space-x-2 mb-3">
+        <span class="text-xs font-bold tracking-wide px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+          🅿️ 司导执勤
+        </span>
+        <h4 class="text-xs font-bold text-neutral-700">
+          停车场数据 · V-Class 兼容（{{ day.driver_parking|length }}处）
+        </h4>
+      </div>
+      <div class="space-y-2">
+        {% for stop_name, info in day.driver_parking.items() %}
+        <div class="p-2.5 rounded-lg border border-neutral-100 bg-neutral-50/60 text-xs">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-ink truncate">{{ stop_name }}</p>
+              <p class="text-warm/60 mt-0.5">{{ info.get('name', '名称待核实') }}</p>
+              {% if info.get('address') %}
+              <p class="text-warm/40 mt-0.5">{{ info.address }}</p>
+              {% endif %}
+            </div>
+            <div class="text-right shrink-0 space-y-0.5">
+              {% if info.get('height_limit_m') is not none %}
+              <span class="text-[10px] font-mono font-bold {{ 'text-green-600' if info.height_limit_m >= 1.95 else 'text-red-500' }}">
+                ⬆{{ info.height_limit_m }}m
+              </span>
+              {% else %}
+              <span class="text-[10px] font-mono text-amber-500">⚠️限高待核实</span>
+              {% endif %}
+              {% if info.get('large_vehicle_ok') %}
+              <span class="text-[10px] text-green-600 block">✅ V-Class可入</span>
+              {% elif info.get('large_vehicle_ok') is sameas false %}
+              <span class="text-[10px] text-red-500 block">🚫 V-Class不可入</span>
+              {% endif %}
+              {% if info.get('hourly_rate_eur') %}
+              <span class="text-[10px] text-warm/50 block">€{{ info.hourly_rate_eur }}/h</span>
+              {% endif %}
+            </div>
+          </div>
+          {% if info.get('notes') %}
+          <p class="text-[10px] text-warm/50 mt-1.5 leading-relaxed border-t border-neutral-100 pt-1.5">
+            {{ info.notes }}
+          </p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Locked: Driving routes & insider tips -->
     <div class="relative mx-4 my-4 rounded-xl overflow-hidden border border-blush/20
                 bg-gradient-to-br from-cream to-white">
@@ -329,6 +380,39 @@
   </div>
 </section>
 {% endfor %}
+
+<!-- ====== Master Schedule ====== -->
+{% if master_schedule %}
+<section class="mt-8 mb-5">
+  <div class="bg-white rounded-2xl card-shadow overflow-hidden border border-blush/30">
+    <div class="px-5 py-4 border-b border-blush/20 bg-gradient-to-r from-white to-cream">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">📋</span>
+        <h2 class="font-serif text-base font-semibold text-ink">司导执勤总表</h2>
+        <span class="ml-auto text-xs text-warm/50">{{ master_schedule|length }} 个时段</span>
+      </div>
+    </div>
+    <div class="divide-y divide-blush/10">
+      {% for slot in master_schedule %}
+      <div class="px-5 py-3 flex items-start gap-3">
+        <div class="w-14 shrink-0 text-right">
+          <span class="text-[10px] font-mono font-bold text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+            {{ slot.get("time_slot", "") }}
+          </span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-ink">{{ slot.get("activity", "") }}</p>
+          <p class="text-xs text-warm/60 mt-0.5">{{ slot.get("location", "") }}</p>
+          {% if slot.get("driver_note") %}
+          <p class="text-[11px] text-warm/40 mt-1 italic">{{ slot.driver_note }}</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
 
 <!-- ====== Hotel Disclaimer ====== -->
 <section class="mt-8 mb-12">
